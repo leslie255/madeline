@@ -3,16 +3,15 @@ use crate::ir::*;
 pub mod tokens;
 use crate::tokens::*;
 
-static SOURCE: &str = include_str!("../test.mir");
-
 fn main() {
-    let source = String::from(SOURCE);
-    let mut token_stream = TokenStream::new(&source);
-    loop {
-        if let Some(token) = token_stream.next() {
-            println!("{:?}", token);
-        } else {
-            break;
-        }
-    }
+    let src_path = if let Some(p) = std::env::args().nth(1) {
+        p
+    } else {
+        println!("expected one argument for file path, found zero");
+        std::process::exit(1);
+    };
+    let source = std::fs::read_to_string(src_path).unwrap();
+
+    let token_stream = TokenStream::new(&source);
+    let program = Program::parse_from(token_stream);
 }

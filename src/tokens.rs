@@ -38,4 +38,7 @@ impl<'a> TokenStream<'a> {
         }
         Some(token)
     }
+    pub fn expected_next(&mut self) -> String {
+        self.next().expect("unexpected EOF")
+    }
 }

@@ -1,7 +1,7 @@
-def_fn main [
+#def_fn main
 	a u64
-] {
-	set_var var u64 a data u64 255
-	ret data i32 0
+{
+	set_var var u64 a data u64 255 ;
+	ret data i32 0 ;
 }
 
