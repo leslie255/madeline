@@ -1,4 +1,3 @@
-#![allow(unused)]
 use std::iter::Iterator;
 
 pub struct TokenStream<'a> {
