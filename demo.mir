@@ -1,0 +1,18 @@
+/ IR
+#def_fn add_one [
+	u64 num
+] {
+	set_var u64 var num u64 arg 0
+	inc u64 var num
+	ret u64 var num
+}
+
+#def_fn main [
+	u64 a
+] {
+	set_var u64 var a u64 data 255
+	set_arg u64 arg 0 u64 var a
+	call_fn _ fn add_one
+	set_var u64 var a u64 ret_val _
+	ret i32 data 0
+}
