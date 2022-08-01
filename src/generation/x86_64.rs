@@ -404,12 +404,12 @@ pub fn generate_asm(program: Program, fformat: FileFormat) -> String {
                         var_addrs.insert(var_name, stack_depth);
                         stack_depth += dtype.size();
                     }
-                    if !stack_depth.is_power_of_two() && stack_depth == 0 {
+                    if !stack_depth.is_power_of_two() {
                         let mut i = 1u64;
-                        while stack_depth < i {
+                        while stack_depth > i {
                             i *= 2;
-                            stack_depth = 1;
                         }
+                        stack_depth = i;
                     }
                 } else {
                     stack_depth = 0;

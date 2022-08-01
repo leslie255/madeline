@@ -2,11 +2,11 @@
 _test:
 	push	rbp
 	mov	rbp, rsp
-	sub	rsp, 12
+	sub	rsp, 16
 
 	mov	[rbp - 8], esi
 	mov	eax, 255
-	add	rsp, 12
+	add	rsp, 16
 	pop	rbp
 	ret
 
