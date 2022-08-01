@@ -25,9 +25,9 @@ set_var    var i32 x    data i32 255    ;
 
 In this case, `set_var` is an opcode, `var i32 x` is the first operand, and `data i32 255` is the second operand.
 
-Note that in MIR, all tokens have to be separated by spaces, which means that the semicolon at the end of each line of instructions cannot be connected to the last token;
+An operand is consisted of three parts, operand type, data type, and content. In the example above, the operand type of `var i32 x` is `var`, the data type is `i32` and the content is `x`.
 
-In MIR, an operand is consisted of three parts, operand type, data type, and content. In the example above, the operand type of `var i32 x` is `var`, the data type is `i32` and the content is `255`.
+Note that in MIR, all tokens have to be separated by spaces, which means that the semicolon at the end of each line of instructions cannot be connected to the last token;
 
 For some types of operands, one of these thee fields may be irrelevent, such as in this example below:
 ```
