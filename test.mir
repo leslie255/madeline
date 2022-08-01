@@ -1,7 +1,15 @@
+#def_fn test
+	num i32
+{
+	set_var var i32 num arg i32 0 ;
+	ret data i32 255 ;
+}
+
 #def_fn main
 	a u64
 {
-	set_var var u64 a data u64 255 ;
-	ret data i32 0 ;
+	set_arg arg i32 0 data i32 255 ;
+	call_fn fn _ test ;
+	ret ret_val i32 _ ;
 }
 
