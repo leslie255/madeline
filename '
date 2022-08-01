@@ -1,0 +1,61 @@
+#![allow(unused)]
+use super::super::fileformat::*;
+use super::super::ir::*;
+
+use std::collections::HashMap;
+
+macro_rules! asm_code {
+    (fn_prolog, $fformat: expr, $fn_name: expr, $stack_depth: expr) => {{
+        let fn_label_name = $fformat.label($fn_name);
+        format!(
+            "\tglobal\t{}\n{}:\n\tpush\trbp\n\tmov\trbp, rsp\n{}\n",
+            fn_label_name,
+            fn_label_name,
+            if $stack_depth != 0 {
+                format!("\tsub\trsp, {}\n", $stack_depth)
+            } else {
+                format!("")
+            }
+        )
+    }};
+    (fn_epilog, $stack_depth: expr) => {{
+        format!(
+            "{}\tpop\trbp\n\tret\n\n",
+            if $stack_depth != 0 {
+                format!("\tadd\trsp, {}\n", $stack_depth)
+            } else {
+                format!("")
+            }
+        )
+    }};
+}
+
+pub fn generate_asm(program: Program, fformat: FileFormat) -> String {
+    let mut code = String::new();
+    for top_level_expr in program.content {
+        match top_level_expr {
+            TopLevelElement::FnDef(fn_name, vars, body) => {
+                let mut stack_depth: u64;
+                let mut var_addrs: HashMap<String, u64> = HashMap::new();
+                if !vars.is_empty() {
+                    stack_depth = 8;
+                    for (_, dtype) in vars {
+                        stack_depth += dtype.size();
+                    }
+                    if !stack_depth.is_power_of_two() && stack_depth == 0 {
+                        let mut i = 1u64;
+                        while stack_depth < i {
+                            i *= 2;
+                            stack_depth = 1;
+                        }
+                    }
+                } else {
+                    stack_depth = 0;
+                }
+                code.push_str(&asm_code!(fn_prolog, fformat, fn_name, stack_depth));
+                code.push_str(&asm_code!(fn_epilog, stack_depth));
+            }
+        }
+    }
+    return code;
+}

@@ -1,7 +1,5 @@
 use super::tokens::*;
 
-use std::collections::HashMap;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataType {
     Unsigned64,
@@ -31,6 +29,21 @@ impl DataType {
             _ => None,
         }
     }
+    pub fn size(&self) -> u64 {
+        match self {
+            Self::Unsigned64 => 8,
+            Self::Unsigned32 => 4,
+            Self::Unsigned16 => 2,
+            Self::Unsigned8 => 1,
+            Self::Signed64 => 8,
+            Self::Signed32 => 4,
+            Self::Signed16 => 2,
+            Self::Signed8 => 1,
+            Self::Float64 => 8,
+            Self::Float32 => 4,
+            Self::Irrelavent => 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -41,6 +54,46 @@ pub enum OperandContent {
     RetVal,
     Fn(String),
     Irrelavent,
+}
+impl OperandContent {
+    pub fn expect_data(&self) -> &u64 {
+        if let Self::Data(i) = self {
+            i
+        } else {
+            panic!("expects data")
+        }
+    }
+    pub fn expect_var(&self) -> &String {
+        if let Self::Var(s) = self {
+            s
+        } else {
+            panic!("expects var")
+        }
+    }
+    pub fn expect_arg(&self) -> &u64 {
+        if let Self::Arg(i) = self {
+            i
+        } else {
+            panic!("expects arg")
+        }
+    }
+    pub fn expect_ret_val(&self) {
+        if *self != Self::RetVal {
+            panic!("expects ret_val")
+        }
+    }
+    pub fn expect_fn(&self) -> &String {
+        if let Self::Fn(s) = self {
+            s
+        } else {
+            panic!("expects fn")
+        }
+    }
+    pub fn expect_empty(&self) {
+        if *self != Self::Irrelavent {
+            panic!("expects `;`")
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -102,7 +155,7 @@ pub struct Instruction {
 
 #[derive(Debug, Clone)]
 pub enum TopLevelElement {
-    FnDef(String, HashMap<String, DataType>, Vec<Instruction>),
+    FnDef(String, Vec<(String, DataType)>, Vec<Instruction>),
     // function name, variables, instructions
 }
 
@@ -121,7 +174,7 @@ impl Program {
             match token.as_str() {
                 "#def_fn" => {
                     let fn_name = token_stream.expected_next();
-                    let mut vars: HashMap<String, DataType> = HashMap::new();
+                    let mut vars: Vec<(String, DataType)> = Vec::new();
                     // parse variables
                     loop {
                         token = token_stream.expected_next();
@@ -132,7 +185,7 @@ impl Program {
                         token = token_stream.expected_next();
                         let dtype = DataType::from_str(&token)
                             .unwrap_or_else(|| panic!("{} isnot a data type", token));
-                        vars.insert(var_name, dtype);
+                        vars.push((var_name, dtype));
                     }
                     let mut body: Vec<Instruction> = Vec::new();
                     // parse body
