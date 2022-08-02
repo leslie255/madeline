@@ -235,7 +235,7 @@ macro_rules! asm_code {
     }};
     (fn_epilog, $stack_depth: expr) => {{
         format!(
-            "{}\tpop\trbp\n\tret\n\n",
+            "{}\tpop\trbp\n\tret\n",
             if $stack_depth != 0 {
                 format!("\tadd\trsp, {}\n", $stack_depth)
             } else {
@@ -247,6 +247,53 @@ macro_rules! asm_code {
 
 static ARG_REGS: [&'static str; 6] = ["rsi", "rdi", "rdx", "rcx", "r8", "r9"];
 
+fn asm_for_operand(operand: &Operand, var_addrs: &HashMap<String, u64>) -> String {
+    match &operand.content {
+        OperandContent::Data(i) => format!("{}", i),
+        OperandContent::Var(var_name) => {
+            let var_addr = var_addrs.get(var_name).expect("undefined variable");
+            format!("[rbp - {}]", var_addr)
+        }
+        OperandContent::Arg(arg_i) => {
+            reg_name!(convert, ARG_REGS[*arg_i as usize], operand.dtype.size())
+        }
+        OperandContent::RetVal => reg_name!(rax, operand.dtype.size()),
+        _ => panic!("expects data, var, arg, ret_val"),
+    }
+}
+
+fn move_instr(lhs: &Operand, rhs: &Operand, var_addrs: &HashMap<String, u64>) -> String {
+    let lhs_addr = var_addrs
+        .get(lhs.content.expect_var())
+        .expect("undefined variable");
+    match &rhs.content {
+        OperandContent::Var(rhs_name) => {
+            let rax = reg_name!(rax, lhs.dtype.size());
+            let rhs_addr = var_addrs.get(rhs_name).expect("undefined variable");
+            format!(
+                "\tmov\t{}, [rbp - {}]\n\tmov\t[rbp - {}], {}\n",
+                rax, rhs_addr, lhs_addr, rax
+            )
+        }
+        _ => {
+            format!(
+                "\tmov\t[rbp - {}], {}\n",
+                lhs_addr,
+                asm_for_operand(rhs, var_addrs)
+            )
+        }
+    }
+}
+
+fn move_to_reg(reg: &String, rhs: &Operand, var_addrs: &HashMap<String, u64>) -> String {
+    match &rhs.content {
+        OperandContent::Data(0) => {
+            format!("\txor\t{}, {}\n", reg, reg)
+        }
+        _ => format!("\tmov\t{}, {}\n", reg, asm_for_operand(rhs, var_addrs)),
+    }
+}
+
 pub fn gen_instr(
     instr: &Instruction,
     fformat: FileFormat,
@@ -254,59 +301,10 @@ pub fn gen_instr(
     stack_depth: u64,
 ) -> String {
     match &instr.operation {
-        OperationType::SetVar => {
-            let var_addr = format!(
-                "[rbp - {}]",
-                var_addrs
-                    .get(instr.operand0.content.expect_var())
-                    .expect("variable not defined (lhs)")
-            );
-            let mut code = String::new();
-            match &instr.operand1.content {
-                OperandContent::Data(i) => {
-                    code.push_str(format!("\tmov\t{}, {}\n", var_addr, i,).as_str())
-                }
-                OperandContent::Var(var_name) => {
-                    let rax = reg_name!(rax, instr.operand0.dtype.size());
-                    code.push_str(
-                        format!(
-                            "\tmov\t{}, [rbp - {}]\n",
-                            rax.clone(),
-                            var_addrs.get(var_name).expect("variable not defined"),
-                        )
-                        .as_str(),
-                    );
-                    code.push_str(format!("\tmov\t{}, {}\n", var_addr, rax).as_str());
-                }
-                OperandContent::Arg(arg_i) => {
-                    code.push_str(
-                        format!(
-                            "\tmov\t{}, {}\n",
-                            var_addr,
-                            reg_name!(
-                                convert,
-                                ARG_REGS[*arg_i as usize],
-                                instr.operand0.dtype.size()
-                            )
-                        )
-                        .as_str(),
-                    );
-                }
-                OperandContent::RetVal => code.push_str(
-                    format!(
-                        "\tmov\t{}, {}\n",
-                        var_addr,
-                        reg_name!(rax, instr.operand0.dtype.size())
-                    )
-                    .as_str(),
-                ),
-                _ => panic!("expects data, var, arg, ret_val"),
-            }
-            code
-        }
+        OperationType::SetVar => move_instr(&instr.operand0, &instr.operand1, &var_addrs),
         OperationType::SetArg => {
             let arg_i = *instr.operand0.content.expect_arg();
-            if arg_i > 6 {
+            if arg_i >= 6 {
                 panic!("passing more than 6 arugments into a function hasn't been implemented yet");
             }
             let arg_reg = reg_name!(
@@ -314,33 +312,7 @@ pub fn gen_instr(
                 ARG_REGS[arg_i as usize],
                 instr.operand0.dtype.size()
             );
-            match &instr.operand1.content {
-                OperandContent::Data(i) => {
-                    format!("\tmov\t{}, {}\n", arg_reg, i)
-                }
-                OperandContent::Var(var_name) => {
-                    format!(
-                        "\tmov\t{}, [rbp - {}]\n",
-                        arg_reg,
-                        var_addrs.get(var_name).expect("variable not defined"),
-                    )
-                }
-                OperandContent::Arg(arg_i) => format!(
-                    "\tmov\t{}, {}\n",
-                    arg_reg,
-                    reg_name!(
-                        convert,
-                        ARG_REGS[*arg_i as usize],
-                        instr.operand0.dtype.size()
-                    )
-                ),
-                OperandContent::RetVal => format!(
-                    "\tmov\t{}, {}\n",
-                    arg_reg,
-                    reg_name!(rax, instr.operand0.dtype.size())
-                ),
-                _ => panic!("expects data, var, arg, ret_val"),
-            }
+            move_to_reg(&arg_reg, &instr.operand1, &var_addrs)
         }
         OperationType::CallFn => {
             format!(
@@ -350,42 +322,60 @@ pub fn gen_instr(
         }
         OperationType::Ret => {
             instr.operand1.content.expect_empty();
-            let mut code = String::new();
+            let mut code = String::from("\n");
             let rax = reg_name!(rax, instr.operand0.dtype.size());
-            match &instr.operand0.content {
-                OperandContent::Data(i) => {
-                    code.push_str(format!("\tmov\t{}, {}\n", rax, i).as_str())
-                }
-                OperandContent::Var(var_name) => code.push_str(
-                    format!(
-                        "\tmov\t{}, [rbp - {}]\n",
-                        rax,
-                        var_addrs.get(var_name).expect("variable not defined"),
-                    )
-                    .as_str(),
-                ),
-                OperandContent::Arg(arg_i) => code.push_str(
-                    format!(
-                        "\tmov\t{}, {}\n",
-                        rax,
-                        reg_name!(
-                            convert,
-                            ARG_REGS[*arg_i as usize],
-                            instr.operand0.dtype.size()
-                        )
-                    )
-                    .as_str(),
-                ),
-                OperandContent::RetVal => (),
-                _ => panic!("expects data, var, ret_val"),
+            if !instr.operand0.is_irrelavent() {
+                code.push_str(&move_to_reg(&rax, &instr.operand0, &var_addrs));
             }
             code.push_str(asm_code!(fn_epilog, stack_depth).as_str());
             code
         }
-        OperationType::Add => todo!(),
-        OperationType::Sub => todo!(),
-        OperationType::Mul => todo!(),
-        OperationType::Div => todo!(),
+        OperationType::Add => {
+            let rax = reg_name!(rax, instr.operand0.dtype.size());
+            format!(
+                "\tmov\t{}, {}\n\tadd\t{}, {}\n\tmov\t{}, {}\n",
+                rax,
+                asm_for_operand(&instr.operand0, var_addrs),
+                rax,
+                asm_for_operand(&instr.operand1, var_addrs),
+                asm_for_operand(&instr.operand0, var_addrs),
+                rax,
+            )
+        }
+        OperationType::Sub => {
+            let rax = reg_name!(rax, instr.operand0.dtype.size());
+            format!(
+                "\tmov\t{}, {}\n\tsub\t{}, {}\n\tmov\t{}, {}\n",
+                rax,
+                asm_for_operand(&instr.operand0, var_addrs),
+                rax,
+                asm_for_operand(&instr.operand1, var_addrs),
+                asm_for_operand(&instr.operand0, var_addrs),
+                rax,
+            )
+        }
+        OperationType::Mul => {
+            let rax = reg_name!(rax, instr.operand0.dtype.size());
+            format!(
+                "\tmov\t{}, {}\n\tmul\t{}\n\tmov\t{}, {}\n",
+                rax,
+                asm_for_operand(&instr.operand0, var_addrs),
+                asm_for_operand(&instr.operand1, var_addrs),
+                asm_for_operand(&instr.operand0, var_addrs),
+                rax,
+            )
+        }
+        OperationType::Div => {
+            let rax = reg_name!(rax, instr.operand0.dtype.size());
+            format!(
+                "\tmov\t{}, {}\n\tdiv\t{}\n\tmov\t{}, {}\n",
+                rax,
+                asm_for_operand(&instr.operand0, var_addrs),
+                asm_for_operand(&instr.operand1, var_addrs),
+                asm_for_operand(&instr.operand0, var_addrs),
+                rax,
+            )
+        }
         OperationType::Inc => todo!(),
         OperationType::Dec => todo!(),
     }

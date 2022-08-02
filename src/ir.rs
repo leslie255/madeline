@@ -102,7 +102,7 @@ pub struct Operand {
     pub content: OperandContent,
 }
 impl Operand {
-    fn is_irrelavent(&self) -> bool {
+    pub fn is_irrelavent(&self) -> bool {
         DataType::Irrelavent == self.dtype && OperandContent::Irrelavent == self.content
     }
 }
