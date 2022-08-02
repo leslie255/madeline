@@ -3,10 +3,11 @@
 
 I'm planning to use this project as the backend of [leslie255/sharklang](https://github.com/leslie255/sharklang).
 
-### Features
-Madeline can currently generate x86_64 NASM assembly code in elf64 and macho64 format. And there are no optimizations what-so-ever.
+## What does it do?
+Like LLVM, Madeline is a compiler backend, it takes in some IR - Intermedian Representation code, a type of code that is more abstract than machine code, but more basic than higher level programming languages like C, and generates a compiled program from that.
+The current features of Madeline is pretty limited, it can only generates x86_64 NASM assembly in macho64 and elf64 format.
 
-### Using the program
+## Using the program
 To generate assembly code, use this command:
 ``` Bash
 $ madeline source.mir elf64 output.asm
