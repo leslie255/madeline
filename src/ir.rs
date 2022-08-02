@@ -46,15 +46,33 @@ impl DataType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum OperandContent {
     Data(u64),
     Var(String),
     Arg(u64),
     RetVal,
     Fn(String),
+    Label(String),
+    SubBlock(Vec<Instruction>),
     Irrelavent,
 }
+impl PartialEq for OperandContent {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Data(x), Self::Data(y)) => x == y,
+            (Self::Var(s0), Self::Var(s1)) => s0 == s1,
+            (Self::Arg(x), Self::Arg(y)) => x == y,
+            (Self::RetVal, Self::RetVal) => true,
+            (Self::Fn(s0), Self::Fn(s1)) => s0 == s1,
+            (Self::Label(s0), Self::Label(s1)) => s0 == s1,
+            (Self::SubBlock(..), Self::SubBlock(..)) => true,
+            (Self::Irrelavent, Self::Irrelavent) => true,
+            _ => false,
+        }
+    }
+}
+
 impl OperandContent {
     pub fn expect_data(&self) -> &u64 {
         if let Self::Data(i) = self {
@@ -94,6 +112,13 @@ impl OperandContent {
             panic!("expects `;`")
         }
     }
+    pub fn expect_label(&self) -> &String {
+        if let Self::Label(s) = self {
+            s
+        } else {
+            panic!("expects label")
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -127,6 +152,9 @@ pub enum OperationType {
     Div,
     Inc,
     Dec,
+    SubBlock,
+    Label,
+    Jmp,
 }
 impl OperationType {
     fn from_str(s: &String) -> Option<Self> {
@@ -141,6 +169,9 @@ impl OperationType {
             "div" => Some(OperationType::Div),
             "inc" => Some(OperationType::Inc),
             "dec" => Some(OperationType::Dec),
+            "#def_label" => Some(OperationType::Label),
+            "#def_block" => Some(OperationType::Label),
+            "jmp" => Some(OperationType::Jmp),
             _ => None,
         }
     }
@@ -223,7 +254,9 @@ pub fn parse_operand(tokens: &mut TokenStream) -> Operand {
             "arg" => OperandContent::Arg(content.parse().expect("not an integar")),
             "ret_val" => OperandContent::RetVal,
             "fn" => OperandContent::Fn(content),
-            _ => panic!("cannot recognize operand type"),
+            "label" => OperandContent::Label(content),
+            "block" => todo!("block operand has not been implemented yet"),
+            _ => panic!("{} is not a valid operand", optype),
         },
     }
 }

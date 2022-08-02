@@ -378,6 +378,15 @@ pub fn gen_instr(
         }
         OperationType::Inc => todo!(),
         OperationType::Dec => todo!(),
+        OperationType::SubBlock => todo!(),
+        OperationType::Label => format!(
+            "{}:\n",
+            fformat.label(instr.operand0.content.expect_label().clone())
+        ),
+        OperationType::Jmp => format!(
+            "\tjmp\t{}\n",
+            fformat.label(instr.operand0.content.expect_label().clone())
+        ),
     }
 }
 

@@ -1,9 +1,10 @@
 #def_fn main
 	a u64
 {
-	set_var	var u64 a		data u64 100	;
-	add		var u64 a		data u64 155	;
-	mul		var u64 a		data u64 10 	;
-    ret     data i32 0						;
+	set_var		var	u64 a		data u64 0	;
+	#def_label	label _ test				;
+	add			var u64 a		data u64 1	;
+	jmp			label _ test				;
+	ret			data u64 0					;
 }
 
