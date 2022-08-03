@@ -379,8 +379,28 @@ pub fn gen_instr(
         OperationType::RawASM => {
             format!("\t{}\n", instr.operand0.content.expect_raw_asm())
         }
-        OperationType::Inc => todo!(),
-        OperationType::Dec => todo!(),
+        OperationType::Inc => {
+            let rax = reg_name!(rax, instr.operand0.dtype.size());
+            format!(
+                "\tmov\t{}, {}\n\tinc\t{}\n\tmov\t{}, {}\n",
+                rax,
+                asm_for_operand(&instr.operand0, var_addrs),
+                rax,
+                asm_for_operand(&instr.operand0, var_addrs),
+                rax,
+            )
+        }
+        OperationType::Dec => {
+            let rax = reg_name!(rax, instr.operand0.dtype.size());
+            format!(
+                "\tmov\t{}, {}\n\tinc\t{}\n\tmov\t{}, {}\n",
+                rax,
+                asm_for_operand(&instr.operand0, var_addrs),
+                rax,
+                asm_for_operand(&instr.operand0, var_addrs),
+                rax,
+            )
+        }
         OperationType::BlockStart => todo!(),
         OperationType::Label => format!(
             "{}:\n",
