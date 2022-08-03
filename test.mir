@@ -1,7 +1,7 @@
 #def_fn main
 	a u64
 {
-	raw_asm		mov	[rbp - 8], rax				;
+	dec			var u64 a						;
 	ret			var i32 a						;
 }
 

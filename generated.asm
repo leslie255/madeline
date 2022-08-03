@@ -4,7 +4,9 @@ _main:
 	mov	rbp, rsp
 	sub	rsp, 16
 
-	mov [rbp - 8], rax 
+	mov	rax, [rbp - 8]
+	inc	rax
+	mov	[rbp - 8], rax
 
 	mov	eax, [rbp - 8]
 	add	rsp, 16
