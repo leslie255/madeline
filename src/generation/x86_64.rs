@@ -376,9 +376,12 @@ pub fn gen_instr(
                 rax,
             )
         }
+        OperationType::RawASM => {
+            format!("\t{}\n", instr.operand0.content.expect_raw_asm())
+        }
         OperationType::Inc => todo!(),
         OperationType::Dec => todo!(),
-        OperationType::SubBlock => todo!(),
+        OperationType::BlockStart => todo!(),
         OperationType::Label => format!(
             "{}:\n",
             fformat.label(instr.operand0.content.expect_label().clone())

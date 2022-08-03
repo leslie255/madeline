@@ -1,10 +1,7 @@
 #def_fn main
 	a u64
 {
-	set_var		var	u64 a		data u64 0	;
-	#def_label	label _ test				;
-	add			var u64 a		data u64 1	;
-	jmp			label _ test				;
-	ret			data u64 0					;
+	raw_asm		mov	[rbp - 8], rax				;
+	ret			var i32 a						;
 }
 

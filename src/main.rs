@@ -8,9 +8,9 @@ pub mod fileformat;
 use crate::fileformat::*;
 
 use std::env;
+use std::fs;
 use std::io::Write;
 use std::path::Path;
-use std::fs;
 
 fn main() {
     let src_path = if let Some(p) = env::args().nth(1) {
@@ -33,7 +33,7 @@ fn main() {
         println!("expected 3 arguments");
         std::process::exit(1);
     };
-    let source = std::fs::read_to_string(src_path).unwrap();
+    let source = fs::read_to_string(src_path).unwrap();
 
     let token_stream = TokenStream::new(&source);
     let program = Program::parse_from(token_stream);
