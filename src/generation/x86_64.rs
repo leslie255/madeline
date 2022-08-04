@@ -300,6 +300,25 @@ pub fn gen_instr(
     var_addrs: &HashMap<String, u64>,
     stack_depth: u64,
 ) -> String {
+    macro_rules! op_prefix {
+        // returns "i" if the data type is signed
+        // "f" is is floating point types
+        // "" if neither
+        () => {
+            match &instr.operand0.dtype {
+                DataType::Unsigned64
+                | DataType::Unsigned32
+                | DataType::Unsigned16
+                | DataType::Unsigned8 => "",
+                DataType::Signed64
+                | DataType::Signed32
+                | DataType::Signed16
+                | DataType::Signed8 => "i",
+                DataType::Float64 | DataType::Float32 => "f",
+                DataType::Irrelavent => "",
+            }
+        };
+    }
     match &instr.operation {
         OperationType::SetVar => move_instr(&instr.operand0, &instr.operand1, &var_addrs),
         OperationType::SetArg => {
@@ -333,47 +352,43 @@ pub fn gen_instr(
         OperationType::Add => {
             let rax = reg_name!(rax, instr.operand0.dtype.size());
             format!(
-                "\tmov\t{}, {}\n\tadd\t{}, {}\n\tmov\t{}, {}\n",
+                "\tmov\t{}, {}\n\t{}add\t{}, {}\n",
                 rax,
                 asm_for_operand(&instr.operand0, var_addrs),
+                op_prefix!(),
                 rax,
                 asm_for_operand(&instr.operand1, var_addrs),
-                asm_for_operand(&instr.operand0, var_addrs),
-                rax,
             )
         }
         OperationType::Sub => {
             let rax = reg_name!(rax, instr.operand0.dtype.size());
             format!(
-                "\tmov\t{}, {}\n\tsub\t{}, {}\n\tmov\t{}, {}\n",
+                "\tmov\t{}, {}\n\t{}sub\t{}, {}\n",
                 rax,
                 asm_for_operand(&instr.operand0, var_addrs),
+                op_prefix!(),
                 rax,
                 asm_for_operand(&instr.operand1, var_addrs),
-                asm_for_operand(&instr.operand0, var_addrs),
-                rax,
             )
         }
         OperationType::Mul => {
             let rax = reg_name!(rax, instr.operand0.dtype.size());
             format!(
-                "\tmov\t{}, {}\n\tmul\t{}\n\tmov\t{}, {}\n",
+                "\tmov\t{}, {}\n\t{}mul\t{}\n",
                 rax,
                 asm_for_operand(&instr.operand0, var_addrs),
+                op_prefix!(),
                 asm_for_operand(&instr.operand1, var_addrs),
-                asm_for_operand(&instr.operand0, var_addrs),
-                rax,
             )
         }
         OperationType::Div => {
             let rax = reg_name!(rax, instr.operand0.dtype.size());
             format!(
-                "\tmov\t{}, {}\n\tdiv\t{}\n\tmov\t{}, {}\n",
+                "\tmov\t{}, {}\n\t{}div\t{}\n\t",
                 rax,
                 asm_for_operand(&instr.operand0, var_addrs),
+                op_prefix!(),
                 asm_for_operand(&instr.operand1, var_addrs),
-                asm_for_operand(&instr.operand0, var_addrs),
-                rax,
             )
         }
         OperationType::RawASM => {
@@ -410,6 +425,34 @@ pub fn gen_instr(
             "\tjmp\t{}\n",
             fformat.label(instr.operand0.content.expect_label().clone())
         ),
+        OperationType::Cmp => match (&instr.operand0.content, &instr.operand1.content) {
+            (OperandContent::Var(..), OperandContent::Var(..)) => {
+                let var2_addr = asm_for_operand(&instr.operand1, var_addrs);
+                let rax = reg_name!(rax, instr.operand0.dtype.size());
+                format!(
+                    "\tmov\t{}, {}\n\tcmp\t{}, {}\n",
+                    rax,
+                    var2_addr,
+                    rax,
+                    asm_for_operand(&instr.operand0, var_addrs),
+                )
+            }
+            _ => {
+                format!(
+                    "\tcmp\t{}, {}\n",
+                    asm_for_operand(&instr.operand0, var_addrs),
+                    asm_for_operand(&instr.operand1, var_addrs)
+                )
+            }
+        },
+        OperationType::Je => todo!(),
+        OperationType::Jn => todo!(),
+        OperationType::Jz => todo!(),
+        OperationType::Jnz => todo!(),
+        OperationType::Jg => todo!(),
+        OperationType::Jl => todo!(),
+        OperationType::Jnge => todo!(),
+        OperationType::Jnle => todo!(),
     }
 }
 

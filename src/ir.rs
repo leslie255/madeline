@@ -164,6 +164,15 @@ pub enum OperationType {
     BlockStart,
     RawASM,
     Jmp,
+    Cmp,
+    Je,
+    Jn,
+    Jz,
+    Jnz,
+    Jg,
+    Jl,
+    Jnge,
+    Jnle,
 }
 impl OperationType {
     fn from_str(s: &String) -> Option<Self> {
@@ -179,6 +188,15 @@ impl OperationType {
             "inc" => Some(OperationType::Inc),
             "dec" => Some(OperationType::Dec),
             "jmp" => Some(OperationType::Jmp),
+            "cmp" => Some(OperationType::Cmp),
+            "j=" => Some(OperationType::Je),
+            "j!=" => Some(OperationType::Jn),
+            "j=0" => Some(OperationType::Jz),
+            "j!=0" => Some(OperationType::Jnz),
+            "j>" => Some(OperationType::Jg),
+            "j>=" => Some(OperationType::Jnle),
+            "j<" => Some(OperationType::Jl),
+            "j<=" => Some(OperationType::Jnge),
             "#label" => Some(OperationType::Label),
             "#block_start" => Some(OperationType::BlockStart),
             "raw_asm" => Some(OperationType::RawASM),
@@ -290,7 +308,6 @@ pub fn parse_instr(token_stream: &mut TokenStream, current: String) -> Instructi
             operand1,
         }
     } else {
-        println!("yes");
         let mut token = token_stream.expected_next();
         let mut asm = String::new();
         while token != ";" {
