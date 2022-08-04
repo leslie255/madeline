@@ -445,14 +445,38 @@ pub fn gen_instr(
                 )
             }
         },
-        OperationType::Je => todo!(),
-        OperationType::Jn => todo!(),
-        OperationType::Jz => todo!(),
-        OperationType::Jnz => todo!(),
-        OperationType::Jg => todo!(),
-        OperationType::Jl => todo!(),
-        OperationType::Jnge => todo!(),
-        OperationType::Jnle => todo!(),
+        OperationType::Je => {
+            instr.operand1.content.expect_empty();
+            format!("\tje\t{}\n", instr.operand0.content.expect_label())
+        },
+        OperationType::Jn => {
+            instr.operand1.content.expect_empty();
+            format!("\tjn\t{}\n", instr.operand0.content.expect_label())
+        },
+        OperationType::Jz => {
+            instr.operand1.content.expect_empty();
+            format!("\tjz\t{}\n", instr.operand0.content.expect_label())
+        },
+        OperationType::Jnz => {
+            instr.operand1.content.expect_empty();
+            format!("\tjnz\t{}\n", instr.operand0.content.expect_label())
+        },
+        OperationType::Jg => {
+            instr.operand1.content.expect_empty();
+            format!("\tjg\t{}\n", instr.operand0.content.expect_label())
+        },
+        OperationType::Jl => {
+            instr.operand1.content.expect_empty();
+            format!("\tjl\t{}\n", instr.operand0.content.expect_label())
+        },
+        OperationType::Jnge => {
+            instr.operand1.content.expect_empty();
+            format!("\tjnge\t{}\n", instr.operand0.content.expect_label())
+        },
+        OperationType::Jnle => {
+            instr.operand1.content.expect_empty();
+            format!("\tjnle\t{}\n", instr.operand0.content.expect_label())
+        },
     }
 }
 
