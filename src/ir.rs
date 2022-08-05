@@ -25,6 +25,8 @@ impl DataType {
             "i32" => Some(Self::Signed32),
             "i16" => Some(Self::Signed16),
             "i8" => Some(Self::Signed8),
+            "f64" => Some(Self::Float64),
+            "f32" => Some(Self::Float32),
             "_" => Some(Self::Irrelavent),
             _ => None,
         }
