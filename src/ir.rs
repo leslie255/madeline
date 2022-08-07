@@ -218,6 +218,9 @@ pub struct Instruction {
 pub enum TopLevelElement {
     FnDef(String, Vec<(String, DataType)>, Vec<Instruction>),
     // function name, variables, instructions
+    DataStr(String, String),
+    // label name, content
+    Extern(String),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -235,8 +238,9 @@ impl Program {
             match token.as_str() {
                 "#def_fn" => {
                     let fn_name = token_stream.expected_next();
-                    let mut vars: Vec<(String, DataType)> = Vec::new();
+
                     // parse variables
+                    let mut vars: Vec<(String, DataType)> = Vec::new();
                     loop {
                         token = token_stream.expected_next();
                         if token == "{" {
@@ -245,11 +249,12 @@ impl Program {
                         let var_name = token;
                         token = token_stream.expected_next();
                         let dtype = DataType::from_str(&token)
-                            .unwrap_or_else(|| panic!("{} isnot a data type", token));
+                            .unwrap_or_else(|| panic!("{} is not a data type", token));
                         vars.push((var_name, dtype));
                     }
-                    let mut body: Vec<Instruction> = Vec::new();
+
                     // parse body
+                    let mut body: Vec<Instruction> = Vec::new();
                     loop {
                         token = token_stream.expected_next();
                         if token == "}" {
@@ -261,7 +266,19 @@ impl Program {
                         .content
                         .push(TopLevelElement::FnDef(fn_name, vars, body));
                 }
-                _ => panic!("cannot recognize {:?}", token),
+                "#data_str" => {
+                    let label_name = token_stream.expected_next();
+                    let mut string = String::from(token_stream.next_non_whitespace_ch().expect("Unexpected EOF"));
+                    while let Some(ch) = token_stream.next_ch_until('\n') {
+                        string.push(ch);
+                    }
+                    program.content.push(TopLevelElement::DataStr(label_name, string));
+                }
+                "#extern" => {
+                    let label_name = token_stream.expected_next();
+                    program.content.push(TopLevelElement::Extern(label_name));
+                }
+                _ => panic!("cannot recognize {:?}, it is either not an instruction or not allowed at top level", token),
             }
         }
         program

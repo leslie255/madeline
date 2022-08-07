@@ -1,5 +1,6 @@
 use super::super::fileformat::*;
 use super::super::ir::*;
+use super::str_fmt::*;
 
 use std::collections::HashMap;
 
@@ -245,9 +246,13 @@ macro_rules! asm_code {
     }};
 }
 
-static ARG_REGS: [&'static str; 6] = ["rsi", "rdi", "rdx", "rcx", "r8", "r9"];
+static ARG_REGS: [&'static str; 6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
 
-fn asm_for_operand(operand: &Operand, var_addrs: &HashMap<String, u64>) -> String {
+fn asm_for_operand(
+    operand: &Operand,
+    var_addrs: &HashMap<String, u64>,
+    fformat: FileFormat,
+) -> String {
     match &operand.content {
         OperandContent::Data(i) => format!("{}", i),
         OperandContent::Var(var_name) => {
@@ -258,11 +263,17 @@ fn asm_for_operand(operand: &Operand, var_addrs: &HashMap<String, u64>) -> Strin
             reg_name!(convert, ARG_REGS[*arg_i as usize], operand.dtype.size())
         }
         OperandContent::RetVal => reg_name!(rax, operand.dtype.size()),
+        OperandContent::Label(label) => fformat.label(label.clone()),
         _ => panic!("expects data, var, arg, ret_val"),
     }
 }
 
-fn move_instr(lhs: &Operand, rhs: &Operand, var_addrs: &HashMap<String, u64>) -> String {
+fn move_instr(
+    lhs: &Operand,
+    rhs: &Operand,
+    var_addrs: &HashMap<String, u64>,
+    fformat: FileFormat,
+) -> String {
     let lhs_addr = var_addrs
         .get(lhs.content.expect_var())
         .expect("undefined variable");
@@ -279,18 +290,27 @@ fn move_instr(lhs: &Operand, rhs: &Operand, var_addrs: &HashMap<String, u64>) ->
             format!(
                 "\tmov\t[rbp - {}], {}\n",
                 lhs_addr,
-                asm_for_operand(rhs, var_addrs)
+                asm_for_operand(rhs, var_addrs, fformat)
             )
         }
     }
 }
 
-fn move_to_reg(reg: &String, rhs: &Operand, var_addrs: &HashMap<String, u64>) -> String {
+fn move_to_reg(
+    reg: &String,
+    rhs: &Operand,
+    var_addrs: &HashMap<String, u64>,
+    fformat: FileFormat,
+) -> String {
     match &rhs.content {
         OperandContent::Data(0) => {
             format!("\txor\t{}, {}\n", reg, reg)
         }
-        _ => format!("\tmov\t{}, {}\n", reg, asm_for_operand(rhs, var_addrs)),
+        _ => format!(
+            "\tmov\t{}, {}\n",
+            reg,
+            asm_for_operand(rhs, var_addrs, fformat)
+        ),
     }
 }
 
@@ -320,7 +340,7 @@ pub fn gen_instr(
         };
     }
     match &instr.operation {
-        OperationType::SetVar => move_instr(&instr.operand0, &instr.operand1, &var_addrs),
+        OperationType::SetVar => move_instr(&instr.operand0, &instr.operand1, &var_addrs, fformat),
         OperationType::SetArg => {
             let arg_i = *instr.operand0.content.expect_arg();
             if arg_i >= 6 {
@@ -331,7 +351,7 @@ pub fn gen_instr(
                 ARG_REGS[arg_i as usize],
                 instr.operand0.dtype.size()
             );
-            move_to_reg(&arg_reg, &instr.operand1, &var_addrs)
+            move_to_reg(&arg_reg, &instr.operand1, &var_addrs, fformat)
         }
         OperationType::CallFn => {
             format!(
@@ -344,7 +364,7 @@ pub fn gen_instr(
             let mut code = String::from("\n");
             let rax = reg_name!(rax, instr.operand0.dtype.size());
             if !instr.operand0.is_irrelavent() {
-                code.push_str(&move_to_reg(&rax, &instr.operand0, &var_addrs));
+                code.push_str(&move_to_reg(&rax, &instr.operand0, &var_addrs, fformat));
             }
             code.push_str(asm_code!(fn_epilog, stack_depth).as_str());
             code
@@ -354,10 +374,10 @@ pub fn gen_instr(
             format!(
                 "\tmov\t{}, {}\n\t{}add\t{}, {}\n",
                 rax,
-                asm_for_operand(&instr.operand0, var_addrs),
+                asm_for_operand(&instr.operand0, var_addrs, fformat),
                 op_prefix!(),
                 rax,
-                asm_for_operand(&instr.operand1, var_addrs),
+                asm_for_operand(&instr.operand1, var_addrs, fformat),
             )
         }
         OperationType::Sub => {
@@ -365,10 +385,10 @@ pub fn gen_instr(
             format!(
                 "\tmov\t{}, {}\n\t{}sub\t{}, {}\n",
                 rax,
-                asm_for_operand(&instr.operand0, var_addrs),
+                asm_for_operand(&instr.operand0, var_addrs, fformat),
                 op_prefix!(),
                 rax,
-                asm_for_operand(&instr.operand1, var_addrs),
+                asm_for_operand(&instr.operand1, var_addrs, fformat),
             )
         }
         OperationType::Mul => {
@@ -376,9 +396,9 @@ pub fn gen_instr(
             format!(
                 "\tmov\t{}, {}\n\t{}mul\t{}\n",
                 rax,
-                asm_for_operand(&instr.operand0, var_addrs),
+                asm_for_operand(&instr.operand0, var_addrs, fformat),
                 op_prefix!(),
-                asm_for_operand(&instr.operand1, var_addrs),
+                asm_for_operand(&instr.operand1, var_addrs, fformat),
             )
         }
         OperationType::Div => {
@@ -386,9 +406,9 @@ pub fn gen_instr(
             format!(
                 "\tmov\t{}, {}\n\t{}div\t{}\n\t",
                 rax,
-                asm_for_operand(&instr.operand0, var_addrs),
+                asm_for_operand(&instr.operand0, var_addrs, fformat),
                 op_prefix!(),
-                asm_for_operand(&instr.operand1, var_addrs),
+                asm_for_operand(&instr.operand1, var_addrs, fformat),
             )
         }
         OperationType::RawASM => {
@@ -399,9 +419,9 @@ pub fn gen_instr(
             format!(
                 "\tmov\t{}, {}\n\tinc\t{}\n\tmov\t{}, {}\n",
                 rax,
-                asm_for_operand(&instr.operand0, var_addrs),
+                asm_for_operand(&instr.operand0, var_addrs, fformat),
                 rax,
-                asm_for_operand(&instr.operand0, var_addrs),
+                asm_for_operand(&instr.operand0, var_addrs, fformat),
                 rax,
             )
         }
@@ -410,9 +430,9 @@ pub fn gen_instr(
             format!(
                 "\tmov\t{}, {}\n\tdec\t{}\n\tmov\t{}, {}\n",
                 rax,
-                asm_for_operand(&instr.operand0, var_addrs),
+                asm_for_operand(&instr.operand0, var_addrs, fformat),
                 rax,
-                asm_for_operand(&instr.operand0, var_addrs),
+                asm_for_operand(&instr.operand0, var_addrs, fformat),
                 rax,
             )
         }
@@ -427,56 +447,56 @@ pub fn gen_instr(
         ),
         OperationType::Cmp => match (&instr.operand0.content, &instr.operand1.content) {
             (OperandContent::Var(..), OperandContent::Var(..)) => {
-                let var2_addr = asm_for_operand(&instr.operand1, var_addrs);
+                let var2_addr = asm_for_operand(&instr.operand1, var_addrs, fformat);
                 let rax = reg_name!(rax, instr.operand0.dtype.size());
                 format!(
                     "\tmov\t{}, {}\n\tcmp\t{}, {}\n",
                     rax,
                     var2_addr,
                     rax,
-                    asm_for_operand(&instr.operand0, var_addrs),
+                    asm_for_operand(&instr.operand0, var_addrs, fformat),
                 )
             }
             _ => {
                 format!(
                     "\tcmp\t{}, {}\n",
-                    asm_for_operand(&instr.operand0, var_addrs),
-                    asm_for_operand(&instr.operand1, var_addrs)
+                    asm_for_operand(&instr.operand0, var_addrs, fformat),
+                    asm_for_operand(&instr.operand1, var_addrs, fformat)
                 )
             }
         },
         OperationType::Je => {
             instr.operand1.content.expect_empty();
             format!("\tje\t{}\n", instr.operand0.content.expect_label())
-        },
+        }
         OperationType::Jn => {
             instr.operand1.content.expect_empty();
             format!("\tjn\t{}\n", instr.operand0.content.expect_label())
-        },
+        }
         OperationType::Jz => {
             instr.operand1.content.expect_empty();
             format!("\tjz\t{}\n", instr.operand0.content.expect_label())
-        },
+        }
         OperationType::Jnz => {
             instr.operand1.content.expect_empty();
             format!("\tjnz\t{}\n", instr.operand0.content.expect_label())
-        },
+        }
         OperationType::Jg => {
             instr.operand1.content.expect_empty();
             format!("\tjg\t{}\n", instr.operand0.content.expect_label())
-        },
+        }
         OperationType::Jl => {
             instr.operand1.content.expect_empty();
             format!("\tjl\t{}\n", instr.operand0.content.expect_label())
-        },
+        }
         OperationType::Jnge => {
             instr.operand1.content.expect_empty();
             format!("\tjnge\t{}\n", instr.operand0.content.expect_label())
-        },
+        }
         OperationType::Jnle => {
             instr.operand1.content.expect_empty();
             format!("\tjnle\t{}\n", instr.operand0.content.expect_label())
-        },
+        }
     }
 }
 
@@ -508,7 +528,20 @@ pub fn generate_asm(program: Program, fformat: FileFormat) -> String {
                     code.push_str(&gen_instr(instr, fformat, &var_addrs, stack_depth));
                 }
             }
+            TopLevelElement::DataStr(label, string) => {
+                code.push_str(
+                    format!(
+                        "{}:\tdb {}0x00\n",
+                        fformat.label(label),
+                        asm_str_from(string)
+                    )
+                    .as_str(),
+                );
+            }
+            TopLevelElement::Extern(label) => {
+                code.push_str(format!("extern\t{}\n", fformat.label(label)).as_str());
+            }
         }
     }
-    return code;
+    code
 }

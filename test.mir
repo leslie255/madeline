@@ -1,7 +1,10 @@
+#extern			printf
+#data_str		message	hello, world
 #def_fn main
 	a u64
 {
-	dec			var u64 a						;
+	set_arg		arg u64 0		label _ message	;
+	call_fn		fn _ printf						;
 	ret			var i32 a						;
 }
 

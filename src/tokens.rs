@@ -1,14 +1,12 @@
 use std::iter::Iterator;
 
 pub struct TokenStream<'a> {
-    pub source: &'a String,
-    pub iter: Box<(dyn Iterator<Item = char> + 'a)>,
+    iter: Box<(dyn Iterator<Item = char> + 'a)>,
 }
 
 impl<'a> TokenStream<'a> {
     pub fn new(source: &'a String) -> Self {
         TokenStream {
-            source,
             iter: Box::new(source.chars().into_iter()),
         }
     }
@@ -40,5 +38,24 @@ impl<'a> TokenStream<'a> {
     }
     pub fn expected_next(&mut self) -> String {
         self.next().expect("unexpected EOF")
+    }
+    // give the next non whitespace character
+    // returns None if EOF
+    pub fn next_non_whitespace_ch(&mut self) -> Option<char> {
+        let mut ch = self.iter.next()?;
+        while ch.is_whitespace() {
+            ch = self.iter.next()?;
+        }
+        Some(ch)
+    }
+    // give only one character until reaching a character
+    // returns None if reaches `end` or EOF
+    pub fn next_ch_until(&mut self, end: char) -> Option<char> {
+        let ch = self.iter.next()?;
+        if ch == end {
+            None
+        } else {
+            Some(ch)
+        }
     }
 }

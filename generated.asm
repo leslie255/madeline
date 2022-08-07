@@ -1,12 +1,13 @@
+extern	_printf
+_message:	db 0x68, 0x65, 0x6C, 0x6C, 0x6F, 0x2C, 0x20, 0x77, 0x6F, 0x72, 0x6C, 0x64, 0x0A, 0x00
 	global	_main
 _main:
 	push	rbp
 	mov	rbp, rsp
 	sub	rsp, 16
 
-	mov	rax, [rbp - 8]
-	dec	rax
-	mov	[rbp - 8], rax
+	mov	rdi, _message
+	call	_printf
 
 	mov	eax, [rbp - 8]
 	add	rsp, 16
