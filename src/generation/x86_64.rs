@@ -257,7 +257,17 @@ fn asm_for_operand(
         OperandContent::Data(i) => format!("{}", i),
         OperandContent::Var(var_name) => {
             let var_addr = var_addrs.get(var_name).expect("undefined variable");
-            format!("[rbp - {}]", var_addr)
+            format!(
+                "{} [rbp - {}]",
+                var_addr,
+                match operand.dtype.size() {
+                    8 => "qword",
+                    4 => "dword",
+                    2 => "bword",
+                    1 => "byte",
+                    _ => panic!(),
+                }
+            )
         }
         OperandContent::Arg(arg_i) => {
             reg_name!(convert, ARG_REGS[*arg_i as usize], operand.dtype.size())
