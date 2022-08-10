@@ -259,14 +259,14 @@ fn asm_for_operand(
             let var_addr = var_addrs.get(var_name).expect("undefined variable");
             format!(
                 "{} [rbp - {}]",
-                var_addr,
                 match operand.dtype.size() {
                     8 => "qword",
                     4 => "dword",
                     2 => "bword",
                     1 => "byte",
                     _ => panic!(),
-                }
+                },
+                var_addr,
             )
         }
         OperandContent::Arg(arg_i) => {
