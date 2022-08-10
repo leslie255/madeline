@@ -284,23 +284,22 @@ fn move_instr(
     var_addrs: &HashMap<String, u64>,
     fformat: FileFormat,
 ) -> String {
-    let lhs_addr = var_addrs
-        .get(lhs.content.expect_var())
-        .expect("undefined variable");
     match &rhs.content {
-        OperandContent::Var(rhs_name) => {
+        OperandContent::Var(_) => {
             let rax = reg_name!(rax, lhs.dtype.size());
-            let rhs_addr = var_addrs.get(rhs_name).expect("undefined variable");
             format!(
-                "\tmov\t{}, [rbp - {}]\n\tmov\t[rbp - {}], {}\n",
-                rax, rhs_addr, lhs_addr, rax
+                "\tmov\t{}, {}\n\tmov\t{}, {}\n",
+                rax,
+                asm_for_operand(rhs, var_addrs, fformat),
+                asm_for_operand(lhs, var_addrs, fformat),
+                rax
             )
         }
         _ => {
             format!(
-                "\tmov\t[rbp - {}], {}\n",
-                lhs_addr,
-                asm_for_operand(rhs, var_addrs, fformat)
+                "\tmov\t{}, {}\n",
+                asm_for_operand(lhs, var_addrs, fformat),
+                asm_for_operand(rhs, var_addrs, fformat),
             )
         }
     }
