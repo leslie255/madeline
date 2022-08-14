@@ -53,10 +53,11 @@ pub enum OperandContent {
     Data(u64),
     Var(String),
     Arg(u64),
-    RetVal,
+    Result,
+    RetVoid,
     Fn(String),
     Label(String),
-    SubBlock(Vec<Instruction>),
+    SubBlock(Vec<(String, DataType)>),
     RawASM(String),
     Irrelavent,
 }
@@ -66,7 +67,7 @@ impl PartialEq for OperandContent {
             (Self::Data(x), Self::Data(y)) => x == y,
             (Self::Var(s0), Self::Var(s1)) => s0 == s1,
             (Self::Arg(x), Self::Arg(y)) => x == y,
-            (Self::RetVal, Self::RetVal) => true,
+            (Self::Result, Self::Result) => true,
             (Self::Fn(s0), Self::Fn(s1)) => s0 == s1,
             (Self::Label(s0), Self::Label(s1)) => s0 == s1,
             (Self::SubBlock(..), Self::SubBlock(..)) => true,
@@ -99,7 +100,7 @@ impl OperandContent {
         }
     }
     pub fn expect_ret_val(&self) {
-        if *self != Self::RetVal {
+        if *self != Self::Result {
             panic!("expects ret_val")
         }
     }
@@ -155,7 +156,8 @@ pub enum OperationType {
     SetVar,
     SetArg,
     CallFn,
-    Ret,
+    RetVal,
+    RetVoid,
     Add,
     Sub,
     Mul,
@@ -164,6 +166,7 @@ pub enum OperationType {
     Dec,
     Label,
     BlockStart,
+    BlockEnd,
     RawASM,
     Jmp,
     Cmp,
@@ -182,7 +185,8 @@ impl OperationType {
             "set_var" => Some(OperationType::SetVar),
             "set_arg" => Some(OperationType::SetArg),
             "call_fn" => Some(OperationType::CallFn),
-            "ret" => Some(OperationType::Ret),
+            "ret_val" => Some(OperationType::RetVal),
+            "ret_void" => Some(OperationType::RetVoid),
             "add" => Some(OperationType::Add),
             "sub" => Some(OperationType::Sub),
             "mul" => Some(OperationType::Mul),
@@ -199,8 +203,9 @@ impl OperationType {
             "j>=" => Some(OperationType::Jnle),
             "j<" => Some(OperationType::Jl),
             "j<=" => Some(OperationType::Jnge),
-            "#label" => Some(OperationType::Label),
+            "def_label" => Some(OperationType::Label),
             "#block_start" => Some(OperationType::BlockStart),
+            "#block_end" => Some(OperationType::BlockEnd),
             "raw_asm" => Some(OperationType::RawASM),
             _ => None,
         }
@@ -286,8 +291,8 @@ impl Program {
 }
 
 pub fn parse_operand(tokens: &mut TokenStream) -> Operand {
-    let optype = tokens.expected_next();
-    if optype == ";" {
+    let opcode_str = tokens.expected_next();
+    if opcode_str == "_" {
         return Operand::default();
     }
     let dtype = DataType::from_str(&tokens.expected_next()).expect("cannot recognize data type");
@@ -295,15 +300,15 @@ pub fn parse_operand(tokens: &mut TokenStream) -> Operand {
 
     Operand {
         dtype,
-        content: match optype.as_str() {
+        content: match opcode_str.as_str() {
             "data" => OperandContent::Data(content.parse().expect("not an integar")),
             "var" => OperandContent::Var(content),
             "arg" => OperandContent::Arg(content.parse().expect("not an integar")),
-            "ret_val" => OperandContent::RetVal,
+            "result" => OperandContent::Result,
             "fn" => OperandContent::Fn(content),
             "label" => OperandContent::Label(content),
             "block" => todo!("block operand has not been implemented yet"),
-            _ => panic!("{} is not a valid operand", optype),
+            _ => panic!("{} is not a valid operand", opcode_str),
         },
     }
 }
@@ -313,34 +318,40 @@ pub fn parse_instr(token_stream: &mut TokenStream, current: String) -> Instructi
     let opcode =
         OperationType::from_str(&id).unwrap_or_else(|| panic!("cannot recognize op `{}`", id));
 
-    if opcode != OperationType::RawASM {
-        let operand0 = parse_operand(token_stream);
-        let operand1 = parse_operand(token_stream);
-        if !operand1.is_irrelavent() {
-            if token_stream.next() != Some(String::from(";")) {
-                panic!("expected `;`");
+    match opcode {
+        OperationType::RawASM => {
+            let mut token = token_stream.expected_next();
+            let mut asm = String::new();
+            while token != ";" {
+                asm.push_str(token.as_str());
+                asm.push(' ');
+                token = token_stream.expected_next();
+            }
+            Instruction {
+                operation: opcode,
+                operand0: Operand {
+                    dtype: DataType::Irrelavent,
+                    content: OperandContent::RawASM(asm),
+                },
+                operand1: Operand::default(),
             }
         }
-        Instruction {
-            operation: opcode,
-            operand0,
-            operand1,
-        }
-    } else {
-        let mut token = token_stream.expected_next();
-        let mut asm = String::new();
-        while token != ";" {
-            asm.push_str(token.as_str());
-            asm.push(' ');
-            token = token_stream.expected_next();
-        }
-        Instruction {
+        OperationType::BlockStart => Instruction {
             operation: opcode,
             operand0: Operand {
                 dtype: DataType::Irrelavent,
-                content: OperandContent::RawASM(asm),
+                content: OperandContent::SubBlock(Vec::new()),
             },
             operand1: Operand::default(),
+        },
+        _ => {
+            let operand0 = parse_operand(token_stream);
+            let operand1 = parse_operand(token_stream);
+            Instruction {
+                operation: opcode,
+                operand0,
+                operand1,
+            }
         }
     }
 }

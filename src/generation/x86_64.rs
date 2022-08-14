@@ -272,7 +272,7 @@ fn asm_for_operand(
         OperandContent::Arg(arg_i) => {
             reg_name!(convert, ARG_REGS[*arg_i as usize], operand.dtype.size())
         }
-        OperandContent::RetVal => reg_name!(rax, operand.dtype.size()),
+        OperandContent::Result => reg_name!(rax, operand.dtype.size()),
         OperandContent::Label(label) => fformat.label(label.clone()),
         _ => panic!("expects data, var, arg, ret_val"),
     }
@@ -368,13 +368,17 @@ pub fn gen_instr(
                 fformat.label(instr.operand0.content.expect_fn().clone())
             )
         }
-        OperationType::Ret => {
+        OperationType::RetVal => {
             instr.operand1.content.expect_empty();
             let mut code = String::from("\n");
             let rax = reg_name!(rax, instr.operand0.dtype.size());
-            if !instr.operand0.is_irrelavent() {
-                code.push_str(&move_to_reg(&rax, &instr.operand0, &var_addrs, fformat));
-            }
+            code.push_str(&move_to_reg(&rax, &instr.operand0, &var_addrs, fformat));
+            code.push_str(asm_code!(fn_epilog, stack_depth).as_str());
+            code
+        }
+        OperationType::RetVoid => {
+            instr.operand1.content.expect_empty();
+            let mut code = String::from("\n");
             code.push_str(asm_code!(fn_epilog, stack_depth).as_str());
             code
         }
@@ -446,6 +450,7 @@ pub fn gen_instr(
             )
         }
         OperationType::BlockStart => todo!(),
+        OperationType::BlockEnd => todo!(),
         OperationType::Label => format!(
             "{}:\n",
             fformat.label(instr.operand0.content.expect_label().clone())
@@ -476,35 +481,59 @@ pub fn gen_instr(
         },
         OperationType::Je => {
             instr.operand1.content.expect_empty();
-            format!("\tje\t{}\n", instr.operand0.content.expect_label())
+            format!(
+                "\tje\t{}\n",
+                fformat.label(instr.operand0.content.expect_label().clone())
+            )
         }
         OperationType::Jn => {
             instr.operand1.content.expect_empty();
-            format!("\tjn\t{}\n", instr.operand0.content.expect_label())
+            format!(
+                "\tjne\t{}\n",
+                fformat.label(instr.operand0.content.expect_label().clone())
+            )
         }
         OperationType::Jz => {
             instr.operand1.content.expect_empty();
-            format!("\tjz\t{}\n", instr.operand0.content.expect_label())
+            format!(
+                "\tjz\t{}\n",
+                fformat.label(instr.operand0.content.expect_label().clone())
+            )
         }
         OperationType::Jnz => {
             instr.operand1.content.expect_empty();
-            format!("\tjnz\t{}\n", instr.operand0.content.expect_label())
+            format!(
+                "\tjnz\t{}\n",
+                fformat.label(instr.operand0.content.expect_label().clone())
+            )
         }
         OperationType::Jg => {
             instr.operand1.content.expect_empty();
-            format!("\tjg\t{}\n", instr.operand0.content.expect_label())
+            format!(
+                "\tjg\t{}\n",
+                fformat.label(instr.operand0.content.expect_label().clone())
+            )
         }
         OperationType::Jl => {
             instr.operand1.content.expect_empty();
-            format!("\tjl\t{}\n", instr.operand0.content.expect_label())
+            format!(
+                "\tjl\t{}\n",
+                fformat.label(instr.operand0.content.expect_label().clone())
+            )
         }
         OperationType::Jnge => {
             instr.operand1.content.expect_empty();
-            format!("\tjnge\t{}\n", instr.operand0.content.expect_label())
+            format!(
+                "\tjnge\t{}\n",
+                fformat.label(instr.operand0.content.expect_label().clone())
+            )
         }
         OperationType::Jnle => {
             instr.operand1.content.expect_empty();
-            format!("\tjnle\t{}\n", instr.operand0.content.expect_label())
+            format!(
+                "\tjnle\t{}\n",
+                fformat.label(instr.operand0.content.expect_label().clone())
+            )
         }
     }
 }
