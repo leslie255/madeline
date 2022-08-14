@@ -51,9 +51,9 @@ Obviously Madeline doesn't allow instructions at top level, everything has to be
     b i32
 {
     var_set     var u64 a       data u64 255
-    ret_val     data i32 0		_
-	/ also has a `ret_void` opcode for no return values
-	/ both two operands have to be left irrelevant for `ret_void`
+    ret_val     data i32 0      _
+    / also has a `ret_void` opcode for no return values
+    / both two operands have to be left irrelevant for `ret_void`
 }
 ```
 
@@ -77,7 +77,7 @@ To get the return value of the previously called function, use the `result` oper
 {
     / 0 means the first argument
     var_set     var i32 num     arg i32 0
-    ret_val     var i32 num		_
+    ret_val     var i32 num     _
 }
 
 #fn_def main
@@ -86,7 +86,7 @@ To get the return value of the previously called function, use the `result` oper
     set_arg     arg i32 0       data i32 255
     fn_call     fn _ test_func	_
     var_set     var i32 a       result i32 _
-    ret_val     var i32 a		_
+    ret_val     var i32 a       _
 }
 ```
 
