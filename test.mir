@@ -1,36 +1,14 @@
-/ external symbol
-#extern			printf
-
-/ strings doesn't need quote signs because of how simple the syntax is
-#data_str		message	hello, world 
-
-#def_fn say_hello {
-	/ calling a function...
-	set_arg		arg u64 0		label _ message
-	call_fn		fn _ printf		_
-	ret_void	_				_
-}
-
-#def_fn return_a_number {
-	ret_val		data u64 255	_
-}
-
 #def_fn main
 	/ variables are defined per-block
 	a u64
+	b u64
+	c u64
+	d u64
+	e u64
+	f u64
+	g u64
+	h u64
 {
-
-	call_fn		fn _ return_a_number	_
-	set_var		var u64 a				result u64 _
-	
-	def_label	label _ loop_start		_
-	
-	call_fn		fn _ say_hello			_
-	inc			var u64 a				_
-	
-	cmp			var u64 a				data u64 300
-	j!=			label _ loop_start		_
-
 	/ return from a function
 	ret_val		data i32 0				_
 }

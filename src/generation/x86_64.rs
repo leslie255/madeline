@@ -551,12 +551,12 @@ pub fn generate_asm(program: Program, fformat: FileFormat) -> String {
                         var_addrs.insert(var_name, stack_depth);
                         stack_depth += dtype.size();
                     }
-                    if !stack_depth.is_power_of_two() {
-                        let mut i = 1u64;
-                        while stack_depth > i {
-                            i *= 2;
-                        }
-                        stack_depth = i;
+
+                    // align stack by 16 bytes
+                    let i = stack_depth % 16;
+                    if i != 0 {
+                        stack_depth -= i;
+                        stack_depth += 16;
                     }
                 } else {
                     stack_depth = 0;
