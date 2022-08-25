@@ -535,6 +535,7 @@ pub fn gen_instr(
                 fformat.label(instr.operand0.content.expect_label().clone())
             )
         }
+        OperationType::DefVar => String::new(),
     }
 }
 
@@ -542,23 +543,27 @@ pub fn generate_asm(program: Program, fformat: FileFormat) -> String {
     let mut code = String::new();
     for top_level_expr in program.content {
         match top_level_expr {
-            TopLevelElement::FnDef(fn_name, vars, body) => {
-                let mut stack_depth: u64;
-                let mut var_addrs: HashMap<String, u64> = HashMap::new();
-                if !vars.is_empty() {
-                    stack_depth = 8;
-                    for (var_name, dtype) in vars {
-                        var_addrs.insert(var_name, stack_depth);
-                        stack_depth += dtype.size();
+            TopLevelElement::FnDef(fn_name, body) => {
+                let mut stack_depth: u64 = 8;
+                let mut var_addrs = HashMap::<String, u64>::new();
+                for (var_name, var_type) in body.iter().filter_map(|instr| {
+                    if instr.operation == OperationType::DefVar {
+                        Some((
+                            if let OperandContent::Var(name) = &instr.operand0.content {
+                                name
+                            } else {
+                                return None;
+                            },
+                            instr.operand0.dtype,
+                        ))
+                    } else {
+                        None
                     }
-
-                    // align stack by 16 bytes
-                    let i = stack_depth % 16;
-                    if i != 0 {
-                        stack_depth -= i;
-                        stack_depth += 16;
-                    }
-                } else {
+                }) {
+                    stack_depth += var_type.size();
+                    var_addrs.insert(var_name.clone(), stack_depth);
+                }
+                if stack_depth == 8 {
                     stack_depth = 0;
                 }
                 code.push_str(&asm_code!(fn_prolog, fformat, fn_name, stack_depth));

@@ -153,6 +153,7 @@ impl Default for Operand {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OperationType {
+    DefVar,
     SetVar,
     SetArg,
     CallFn,
@@ -182,6 +183,7 @@ pub enum OperationType {
 impl OperationType {
     fn from_str(s: &String) -> Option<Self> {
         match s.as_str() {
+            "def_var" => Some(OperationType::DefVar),
             "set_var" => Some(OperationType::SetVar),
             "set_arg" => Some(OperationType::SetArg),
             "call_fn" => Some(OperationType::CallFn),
@@ -221,7 +223,7 @@ pub struct Instruction {
 
 #[derive(Debug, Clone)]
 pub enum TopLevelElement {
-    FnDef(String, Vec<(String, DataType)>, Vec<Instruction>),
+    FnDef(String, Vec<Instruction>),
     // function name, variables, instructions
     DataStr(String, String),
     // label name, content
@@ -244,18 +246,8 @@ impl Program {
                 "#def_fn" => {
                     let fn_name = token_stream.expected_next();
 
-                    // parse variables
-                    let mut vars: Vec<(String, DataType)> = Vec::new();
-                    loop {
-                        token = token_stream.expected_next();
-                        if token == "{" {
-                            break;
-                        }
-                        let var_name = token;
-                        token = token_stream.expected_next();
-                        let dtype = DataType::from_str(&token)
-                            .unwrap_or_else(|| panic!("{} is not a data type", token));
-                        vars.push((var_name, dtype));
+                    if token_stream.expected_next() != "{" {
+                        panic!("expects `{{` after #def_fn {}", fn_name);
                     }
 
                     // parse body
@@ -269,13 +261,28 @@ impl Program {
                     }
                     program
                         .content
-                        .push(TopLevelElement::FnDef(fn_name, vars, body));
+                        .push(TopLevelElement::FnDef(fn_name, body));
                 }
                 "#data_str" => {
                     let label_name = token_stream.expected_next();
                     let mut string = String::from(token_stream.next_non_whitespace_ch().expect("Unexpected EOF"));
+                    let mut is_in_escape = false;
                     while let Some(ch) = token_stream.next_ch_until('\n') {
-                        string.push(ch);
+                        if !is_in_escape {
+                            if ch == '\\' {
+                                is_in_escape = true;
+                            } else {
+                                string.push(ch);
+                            }
+                        } else {
+                            is_in_escape = false;
+                            match ch {
+                                'n' => string.push('\n'),
+                                '0' => string.push('\0'),
+                                '\\' => string.push('\\'),
+                                _ => panic!("unsupported escape character '{}'", ch),
+                            }
+                        }
                     }
                     program.content.push(TopLevelElement::DataStr(label_name, string));
                 }

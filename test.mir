@@ -1,14 +1,12 @@
+#extern printf
+#data_str fmt %llu\n
+
 #def_fn main
-	/ variables are defined per-block
-	a u64
-	b u64
-	c u64
-	d u64
-	e u64
-	f u64
-	g u64
-	h u64
 {
-	/ return from a function
+	def_var		var u64 a				_
+	set_var		var u64 a				data u64 255
+	set_arg		arg u64 0				label u64 fmt
+	set_arg		arg u64 1				var u64 a
+	call_fn		fn u64 printf			_
 	ret_val		data i32 0				_
 }

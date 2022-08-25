@@ -36,7 +36,7 @@ An operand is consisted of three parts, operand type, data type, and content. In
 
 For some types of operands, one of these thee fields may be irrelevant, such as in this example below:
 ```
-fn_call    fn _ test_func	_
+fn_call    fn _ test_func    _
 ```
 The operand type `fn`, which is basically a function label, doesn't need to have a data type, therefore it is left blank by the underscore symbol `_`. Similarly, in cases where the content field is irrelevant, it may also be left blank by `_`. This instruction also doesn't have the second operand, and is therefore also left irrelevant by the underscore symbol `_`.
 
@@ -47,9 +47,8 @@ Obviously Madeline doesn't allow instructions at top level, everything has to be
 ```
 / btw comments are marked like this
 #fn_def main
-    a u64
-    b i32
 {
+    def_var     var u64 a       _
     var_set     var u64 a       data u64 255
     ret_val     data i32 0      _
     / also has a `ret_void` opcode for no return values
@@ -57,12 +56,17 @@ Obviously Madeline doesn't allow instructions at top level, everything has to be
 }
 ```
 
-In MIR, variables are defined at the start of every code block as shown above, this is due to the way that assembly instructions typically works.
+In the above example we have defined a function called `main`, and roughly translates to this C code:
+``` C
+int main() {
+    uint64_t a = 255;
+    return 0;
+}
+```
 
-Note that all top level elements, such as `#fn_def`, are marked with the `#` symbol, this doesn't really help with the parser in any ways, but it does help to make the code look cleaner on the eye.
+All top level elements, such as `#fn_def`, are marked with the `#` symbol, this doesn't really help with the parser in any ways, but it does help to make the code look cleaner on the eye.
 
-Also note that all tokens have to be separated by spaces so things like `main{` would be treated as a single token `main{` instead of `main` and `{` as two separated tokens, this *is* to make the parser easier to write and faster to run, after all, Madeline is a compiler backend, so the parser part doesn't need to be very advanced.
-
+Note that all tokens have to be separated by spaces so things like `main{` would be treated as a single token `main{` instead of `main` and `{` as two separated tokens, this *is* to make the parser easier to write and faster to run, after all, Madeline is a compiler backend, so the parser part doesn't need to be very advanced.
 
 ### Function arguments and return values
 Unlike higher level languages, there is no safety check for the number of arguments or the type of the arguments, Madeline assumes that the compiler at frontend has already done such checks.
@@ -72,19 +76,17 @@ In the body of a function, use the `arg` operand to get the arguments. To call a
 To get the return value of the previously called function, use the `result` operand.
 
 ```
-#fn_def test_func
-    num i32
-{
+#fn_def test_func {
+    def_var     var i32 num     _
     / 0 means the first argument
     var_set     var i32 num     arg i32 0
     ret_val     var i32 num     _
 }
 
-#fn_def main
-    a i32
-{
+#fn_def main {
+    def_var     var i32 a       _
     set_arg     arg i32 0       data i32 255
-    fn_call     fn _ test_func	_
+    fn_call     fn _ test_func  _
     var_set     var i32 a       result i32 _
     ret_val     var i32 a       _
 }
