@@ -54,7 +54,6 @@ pub enum OperandContent {
     Var(String),
     Arg(u64),
     Result,
-    RetVoid,
     Fn(String),
     Label(String),
     SubBlock(Vec<(String, DataType)>),
@@ -150,6 +149,58 @@ impl Default for Operand {
         }
     }
 }
+impl std::fmt::Display for Operand {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "{} ",
+            match &self.content {
+                OperandContent::Data(_) => "data",
+                OperandContent::Var(_) => "var",
+                OperandContent::Arg(_) => "arg",
+                OperandContent::Result => "result",
+                OperandContent::Fn(_) => "fn",
+                OperandContent::Label(_) => "label",
+                OperandContent::SubBlock(_) => "sub_block",
+                OperandContent::RawASM(_) => "raw_asm",
+                OperandContent::Irrelavent => return Ok(()),
+            }
+        )?;
+        write!(
+            formatter,
+            "{} ",
+            match &self.dtype {
+                DataType::Unsigned64 => "u64",
+                DataType::Unsigned32 => "u32",
+                DataType::Unsigned16 => "u16",
+                DataType::Unsigned8 => "u8",
+                DataType::Signed64 => "i64",
+                DataType::Signed32 => "i32",
+                DataType::Signed16 => "i16",
+                DataType::Signed8 => "i8",
+                DataType::Float64 => "f64",
+                DataType::Float32 => "f32",
+                DataType::Irrelavent => "_",
+            }
+        )?;
+        write!(
+            formatter,
+            "{}",
+            match &self.content {
+                OperandContent::Data(i) => format!("{i}"),
+                OperandContent::Arg(i) => format!("{i}"),
+                OperandContent::Var(name) => format!("{name}"),
+                OperandContent::Result => format!("result"),
+                OperandContent::Fn(name) => format!("{name}"),
+                OperandContent::Label(name) => format!("{name}"),
+                OperandContent::SubBlock(_) => format!("sub_block"),
+                OperandContent::RawASM(s) => format!("{s}"),
+                OperandContent::Irrelavent => format!("_"),
+            }
+        )?;
+        Ok(())
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OperationType {
@@ -211,6 +262,43 @@ impl OperationType {
             "raw_asm" => Some(OperationType::RawASM),
             _ => None,
         }
+    }
+}
+impl std::fmt::Display for OperationType {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "{}",
+            match self {
+                OperationType::DefVar => "def_var",
+                OperationType::SetVar => "set_var",
+                OperationType::SetArg => "set_arg",
+                OperationType::CallFn => "call_fn",
+                OperationType::RetVal => "ret_val",
+                OperationType::RetVoid => "ret_void",
+                OperationType::Add => "add",
+                OperationType::Sub => "sub",
+                OperationType::Mul => "mul",
+                OperationType::Div => "div",
+                OperationType::Inc => "inc",
+                OperationType::Dec => "dec",
+                OperationType::Label => "label",
+                OperationType::BlockStart => "block_start",
+                OperationType::BlockEnd => "block_end",
+                OperationType::RawASM => "raw_asm",
+                OperationType::Jmp => "jmp",
+                OperationType::Cmp => "cmp",
+                OperationType::Je => "j=",
+                OperationType::Jn => "j!=",
+                OperationType::Jz => "j=0",
+                OperationType::Jnz => "j!=0",
+                OperationType::Jg => "j>",
+                OperationType::Jnle => "j>=",
+                OperationType::Jl => "j<",
+                OperationType::Jnge => "j<=",
+            }
+        )?;
+        return Ok(());
     }
 }
 
@@ -294,6 +382,27 @@ impl Program {
             }
         }
         program
+    }
+
+    // print the IR code for debug
+    pub fn print_code(&self) {
+        for toplevel_element in &self.content {
+            match toplevel_element {
+                TopLevelElement::FnDef(fn_name, instructions) => {
+                    println!("#fn_def {fn_name} {{");
+                    for instr in instructions {
+                        println!("\t{}\t{}\t{}", instr.operation, instr.operand0, instr.operand1);
+                    }
+                    println!("}}");
+                }
+                TopLevelElement::DataStr(name, str) => {
+                    println!("#data_str {name}\t{str:?}");
+                },
+                TopLevelElement::Extern(name) => {
+                    println!("#extern {name}");
+                },
+            }
+        }
     }
 }
 

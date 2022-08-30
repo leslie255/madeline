@@ -37,7 +37,7 @@ fn main() {
 
     let token_stream = TokenStream::new(&source);
     let program = Program::parse_from(token_stream);
-    println!("instructions:\n---------------\n{:#?}", program.content);
+    program.print_code();
     let generated = x86_64::generate_asm(program, fformat);
 
     if Path::new(&output_path).exists() {
