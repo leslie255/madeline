@@ -6,9 +6,10 @@ _main:
 	mov	rbp, rsp
 	sub	rsp, 16
 
-	mov	qword [rbp - 16], 255
+	mov	qword [rbp - 8], 255
 	mov	rdi, _fmt
-	mov	rsi, qword [rbp - 16]
+	mov	rsi, qword [rbp - 8]
+	mov	[rbp - 8], 0
 	call	_printf
 
 	xor	eax, eax

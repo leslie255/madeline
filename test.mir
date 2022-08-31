@@ -7,6 +7,7 @@
 	set_var		var u64 a				data u64 255
 	set_arg		arg u64 0				label u64 fmt
 	set_arg		arg u64 1				var u64 a
+	raw_asm		mov	[rbp - 8], 0
 	call_fn		fn u64 printf			_
 	ret_val		data i32 0				_
 }

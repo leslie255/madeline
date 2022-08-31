@@ -560,8 +560,8 @@ pub fn generate_asm(program: Program, fformat: FileFormat) -> String {
                         None
                     }
                 }) {
-                    stack_depth += var_type.size();
                     var_addrs.insert(var_name.clone(), stack_depth);
+                    stack_depth += var_type.size();
                 }
                 if stack_depth == 8 {
                     stack_depth = 0;

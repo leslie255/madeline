@@ -391,16 +391,19 @@ impl Program {
                 TopLevelElement::FnDef(fn_name, instructions) => {
                     println!("#fn_def {fn_name} {{");
                     for instr in instructions {
-                        println!("\t{}\t{}\t{}", instr.operation, instr.operand0, instr.operand1);
+                        println!(
+                            "\t{}\t{}\t{}",
+                            instr.operation, instr.operand0, instr.operand1
+                        );
                     }
                     println!("}}");
                 }
                 TopLevelElement::DataStr(name, str) => {
                     println!("#data_str {name}\t{str:?}");
-                },
+                }
                 TopLevelElement::Extern(name) => {
                     println!("#extern {name}");
-                },
+                }
             }
         }
     }
@@ -413,7 +416,6 @@ pub fn parse_operand(tokens: &mut TokenStream) -> Operand {
     }
     let dtype = DataType::from_str(&tokens.expected_next()).expect("cannot recognize data type");
     let content = tokens.expected_next();
-
     Operand {
         dtype,
         content: match opcode_str.as_str() {
@@ -433,15 +435,11 @@ pub fn parse_instr(token_stream: &mut TokenStream, current: String) -> Instructi
     let id = current;
     let opcode =
         OperationType::from_str(&id).unwrap_or_else(|| panic!("cannot recognize op `{}`", id));
-
     match opcode {
         OperationType::RawASM => {
-            let mut token = token_stream.expected_next();
-            let mut asm = String::new();
-            while token != ";" {
-                asm.push_str(token.as_str());
-                asm.push(' ');
-                token = token_stream.expected_next();
+            let mut asm = String::from(token_stream.next_non_whitespace_ch().expect("Unexpected EOF"));
+            while let Some(ch) = token_stream.next_ch_until('\n') {
+                asm.push(ch);
             }
             Instruction {
                 operation: opcode,
