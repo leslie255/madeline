@@ -47,11 +47,34 @@ impl DataType {
         }
     }
 }
+impl std::fmt::Display for DataType {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "{} ",
+            match &self {
+                DataType::Unsigned64 => "u64",
+                DataType::Unsigned32 => "u32",
+                DataType::Unsigned16 => "u16",
+                DataType::Unsigned8 => "u8",
+                DataType::Signed64 => "i64",
+                DataType::Signed32 => "i32",
+                DataType::Signed16 => "i16",
+                DataType::Signed8 => "i8",
+                DataType::Float64 => "f64",
+                DataType::Float32 => "f32",
+                DataType::Irrelavent => "_",
+            }
+        )?;
+        return Ok(());
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum OperandContent {
     Data(u64),
     Var(String),
+    SVar(String),
     Arg(u64),
     Result,
     Fn(String),
@@ -157,6 +180,7 @@ impl std::fmt::Display for Operand {
             match &self.content {
                 OperandContent::Data(_) => "data",
                 OperandContent::Var(_) => "var",
+                OperandContent::SVar(_) => "svar",
                 OperandContent::Arg(_) => "arg",
                 OperandContent::Result => "result",
                 OperandContent::Fn(_) => "fn",
@@ -166,23 +190,7 @@ impl std::fmt::Display for Operand {
                 OperandContent::Irrelavent => return Ok(()),
             }
         )?;
-        write!(
-            formatter,
-            "{} ",
-            match &self.dtype {
-                DataType::Unsigned64 => "u64",
-                DataType::Unsigned32 => "u32",
-                DataType::Unsigned16 => "u16",
-                DataType::Unsigned8 => "u8",
-                DataType::Signed64 => "i64",
-                DataType::Signed32 => "i32",
-                DataType::Signed16 => "i16",
-                DataType::Signed8 => "i8",
-                DataType::Float64 => "f64",
-                DataType::Float32 => "f32",
-                DataType::Irrelavent => "_",
-            }
-        )?;
+        write!(formatter, "{} ", self.dtype)?;
         write!(
             formatter,
             "{}",
@@ -190,6 +198,7 @@ impl std::fmt::Display for Operand {
                 OperandContent::Data(i) => format!("{i}"),
                 OperandContent::Arg(i) => format!("{i}"),
                 OperandContent::Var(name) => format!("{name}"),
+                OperandContent::SVar(name) => format!("{name}"),
                 OperandContent::Result => format!("result"),
                 OperandContent::Fn(name) => format!("{name}"),
                 OperandContent::Label(name) => format!("{name}"),
@@ -312,10 +321,12 @@ pub struct Instruction {
 #[derive(Debug, Clone)]
 pub enum TopLevelElement {
     FnDef(String, Vec<Instruction>),
-    // function name, variables, instructions
+    // function name, instructions
     DataStr(String, String),
     // label name, content
     Extern(String),
+    // variable name, variable data type
+    StaticVar(String, DataType),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -378,6 +389,11 @@ impl Program {
                     let label_name = token_stream.expected_next();
                     program.content.push(TopLevelElement::Extern(label_name));
                 }
+                "#static_var" => {
+                    let var_name = token_stream.expected_next();
+                    let var_type = DataType::from_str(&token_stream.expected_next()).expect("cannot recognize data type");
+                    program.content.push(TopLevelElement::StaticVar(var_name, var_type));
+                }
                 _ => panic!("cannot recognize {:?}, it is either not an instruction or not allowed at top level", token),
             }
         }
@@ -404,6 +420,9 @@ impl Program {
                 TopLevelElement::Extern(name) => {
                     println!("#extern {name}");
                 }
+                TopLevelElement::StaticVar(name, dtype) => {
+                    println!("#static_var {name} {dtype}");
+                }
             }
         }
     }
@@ -421,6 +440,7 @@ pub fn parse_operand(tokens: &mut TokenStream) -> Operand {
         content: match opcode_str.as_str() {
             "data" => OperandContent::Data(content.parse().expect("not an integar")),
             "var" => OperandContent::Var(content),
+            "svar" => OperandContent::SVar(content),
             "arg" => OperandContent::Arg(content.parse().expect("not an integar")),
             "result" => OperandContent::Result,
             "fn" => OperandContent::Fn(content),
@@ -437,7 +457,11 @@ pub fn parse_instr(token_stream: &mut TokenStream, current: String) -> Instructi
         OperationType::from_str(&id).unwrap_or_else(|| panic!("cannot recognize op `{}`", id));
     match opcode {
         OperationType::RawASM => {
-            let mut asm = String::from(token_stream.next_non_whitespace_ch().expect("Unexpected EOF"));
+            let mut asm = String::from(
+                token_stream
+                    .next_non_whitespace_ch()
+                    .expect("Unexpected EOF"),
+            );
             while let Some(ch) = token_stream.next_ch_until('\n') {
                 asm.push(ch);
             }

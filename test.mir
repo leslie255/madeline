@@ -1,13 +1,10 @@
 #extern printf
 #data_str fmt %llu\n
+#static_var NUMBER u64
 
-#def_fn main
-{
+#def_fn main {
 	def_var		var u64 a				_
-	set_var		var u64 a				data u64 255
-	set_arg		arg u64 0				label u64 fmt
-	set_arg		arg u64 1				var u64 a
-	raw_asm		mov	[rbp - 8], 0
-	call_fn		fn u64 printf			_
+	set_var		svar u64 NUMBER			data u64 255
+	set_var		var u64 a				svar u64 NUMBER
 	ret_val		data i32 0				_
 }

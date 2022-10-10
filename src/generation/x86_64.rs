@@ -224,7 +224,7 @@ macro_rules! asm_code {
     (fn_prolog, $fformat: expr, $fn_name: expr, $stack_depth: expr) => {{
         let fn_label_name = $fformat.label($fn_name);
         format!(
-            "\tglobal\t{}\n{}:\n\tpush\trbp\n\tmov\trbp, rsp\n{}\n",
+            "\tglobal\t{}\n{}:\n\tpush\trbp\n\tmov\trbp, rsp\n{}",
             fn_label_name,
             fn_label_name,
             if $stack_depth != 0 {
@@ -269,12 +269,25 @@ fn asm_for_operand(
                 var_addr,
             )
         }
+        OperandContent::SVar(var_name) => {
+            format!(
+                "{} [rel {}]",
+                match operand.dtype.size() {
+                    8 => "qword",
+                    4 => "dword",
+                    2 => "bword",
+                    1 => "byte",
+                    _ => panic!(),
+                },
+                fformat.label(var_name.clone())
+            )
+        }
         OperandContent::Arg(arg_i) => {
             reg_name!(convert, ARG_REGS[*arg_i as usize], operand.dtype.size())
         }
         OperandContent::Result => reg_name!(rax, operand.dtype.size()),
         OperandContent::Label(label) => fformat.label(label.clone()),
-        _ => panic!("expects data, var, arg, ret_val"),
+        _ => panic!("expects data, var, svar, arg, ret_val"),
     }
 }
 
@@ -285,7 +298,7 @@ fn move_instr(
     fformat: FileFormat,
 ) -> String {
     match &rhs.content {
-        OperandContent::Var(_) => {
+        OperandContent::Var(_) | OperandContent::SVar(_) => {
             let rax = reg_name!(rax, lhs.dtype.size());
             format!(
                 "\tmov\t{}, {}\n\tmov\t{}, {}\n",
@@ -296,11 +309,22 @@ fn move_instr(
             )
         }
         _ => {
-            format!(
-                "\tmov\t{}, {}\n",
-                asm_for_operand(lhs, var_addrs, fformat),
-                asm_for_operand(rhs, var_addrs, fformat),
-            )
+            if let OperandContent::SVar(_) = lhs.content {
+                let rax = reg_name!(rax, lhs.dtype.size());
+                format!(
+                    "\tmov\t{}, {}\n\tmov\t{}, {}\n",
+                    rax,
+                    asm_for_operand(rhs, var_addrs, fformat),
+                    asm_for_operand(lhs, var_addrs, fformat),
+                    rax
+                )
+            } else {
+                format!(
+                    "\tmov\t{}, {}\n",
+                    asm_for_operand(lhs, var_addrs, fformat),
+                    asm_for_operand(rhs, var_addrs, fformat),
+                )
+            }
         }
     }
 }
@@ -370,7 +394,7 @@ pub fn gen_instr(
         }
         OperationType::RetVal => {
             instr.operand1.content.expect_empty();
-            let mut code = String::from("\n");
+            let mut code = String::new();
             let rax = reg_name!(rax, instr.operand0.dtype.size());
             code.push_str(&move_to_reg(&rax, &instr.operand0, &var_addrs, fformat));
             code.push_str(asm_code!(fn_epilog, stack_depth).as_str());
@@ -378,7 +402,7 @@ pub fn gen_instr(
         }
         OperationType::RetVoid => {
             instr.operand1.content.expect_empty();
-            let mut code = String::from("\n");
+            let mut code = String::new();
             code.push_str(asm_code!(fn_epilog, stack_depth).as_str());
             code
         }
@@ -560,8 +584,10 @@ pub fn generate_asm(program: Program, fformat: FileFormat) -> String {
                         None
                     }
                 }) {
-                    var_addrs.insert(var_name.clone(), stack_depth);
-                    stack_depth += var_type.size();
+                    if var_type.size() != 0 {
+                        var_addrs.insert(var_name.clone(), stack_depth);
+                        stack_depth += var_type.size();
+                    }
                 }
                 if stack_depth == 8 {
                     stack_depth = 0;
@@ -583,6 +609,21 @@ pub fn generate_asm(program: Program, fformat: FileFormat) -> String {
             }
             TopLevelElement::Extern(label) => {
                 code.push_str(format!("extern\t{}\n", fformat.label(label)).as_str());
+            }
+            TopLevelElement::StaticVar(name, dtype) => {
+                code.push_str(
+                    format!(
+                        "{}:\t{} 0\n",
+                        fformat.label(name),
+                        match dtype.size() {
+                            8 => "dq",
+                            4 => "dw",
+                            2 => "dd",
+                            _ => "db",
+                        }
+                    )
+                    .as_str(),
+                );
             }
         }
     }
