@@ -1,4 +1,4 @@
-use super::tokens::*;
+use std::rc::Rc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataType {
@@ -15,7 +15,7 @@ pub enum DataType {
     Irrelavent,
 }
 impl DataType {
-    fn from_str(s: &String) -> Option<Self> {
+    pub fn from_str(s: &String) -> Option<Self> {
         match s.as_str() {
             "u64" => Some(Self::Unsigned64),
             "u32" => Some(Self::Unsigned32),
@@ -73,14 +73,14 @@ impl std::fmt::Display for DataType {
 #[derive(Debug, Clone)]
 pub enum OperandContent {
     Data(u64),
-    Var(String),
-    SVar(String),
+    Var(u64),
+    SVar(Rc<String>),
     Arg(u64),
     Result,
-    Fn(String),
-    Label(String),
-    SubBlock(Vec<(String, DataType)>),
-    RawASM(String),
+    Fn(Rc<String>),
+    Label(Rc<String>),
+    SubBlock,
+    RawASM(Rc<String>),
     Irrelavent,
 }
 impl PartialEq for OperandContent {
@@ -92,7 +92,7 @@ impl PartialEq for OperandContent {
             (Self::Result, Self::Result) => true,
             (Self::Fn(s0), Self::Fn(s1)) => s0 == s1,
             (Self::Label(s0), Self::Label(s1)) => s0 == s1,
-            (Self::SubBlock(..), Self::SubBlock(..)) => true,
+            (Self::SubBlock, Self::SubBlock) => true,
             (Self::Irrelavent, Self::Irrelavent) => true,
             _ => false,
         }
@@ -107,7 +107,7 @@ impl OperandContent {
             panic!("expects data")
         }
     }
-    pub fn expect_var(&self) -> &String {
+    pub fn expect_var(&self) -> &u64 {
         if let Self::Var(s) = self {
             s
         } else {
@@ -135,7 +135,7 @@ impl OperandContent {
     }
     pub fn expect_empty(&self) {
         if *self != Self::Irrelavent {
-            panic!("expects `;`")
+            panic!("expects _")
         }
     }
     pub fn expect_label(&self) -> &String {
@@ -185,9 +185,9 @@ impl std::fmt::Display for Operand {
                 OperandContent::Result => "result",
                 OperandContent::Fn(_) => "fn",
                 OperandContent::Label(_) => "label",
-                OperandContent::SubBlock(_) => "sub_block",
+                OperandContent::SubBlock => "sub_block",
                 OperandContent::RawASM(_) => "raw_asm",
-                OperandContent::Irrelavent => return Ok(()),
+                OperandContent::Irrelavent => "_",
             }
         )?;
         write!(formatter, "{} ", self.dtype)?;
@@ -197,12 +197,12 @@ impl std::fmt::Display for Operand {
             match &self.content {
                 OperandContent::Data(i) => format!("{i}"),
                 OperandContent::Arg(i) => format!("{i}"),
-                OperandContent::Var(name) => format!("{name}"),
+                OperandContent::Var(id) => format!("{id}"),
                 OperandContent::SVar(name) => format!("{name}"),
                 OperandContent::Result => format!("result"),
                 OperandContent::Fn(name) => format!("{name}"),
                 OperandContent::Label(name) => format!("{name}"),
-                OperandContent::SubBlock(_) => format!("sub_block"),
+                OperandContent::SubBlock => format!("sub_block"),
                 OperandContent::RawASM(s) => format!("{s}"),
                 OperandContent::Irrelavent => format!("_"),
             }
@@ -241,7 +241,7 @@ pub enum OperationType {
     Jnle,
 }
 impl OperationType {
-    fn from_str(s: &String) -> Option<Self> {
+    pub fn from_str(s: &String) -> Option<Self> {
         match s.as_str() {
             "def_var" => Some(OperationType::DefVar),
             "set_var" => Some(OperationType::SetVar),
@@ -307,7 +307,7 @@ impl std::fmt::Display for OperationType {
                 OperationType::Jnge => "j<=",
             }
         )?;
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -317,179 +317,51 @@ pub struct Instruction {
     pub operand0: Operand,
     pub operand1: Operand,
 }
+impl std::fmt::Display for Instruction {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            formatter,
+            "{}\t{}\t{}",
+            self.operation, self.operand0, self.operand1
+        )?;
+        Ok(())
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum TopLevelElement {
-    FnDef(String, Vec<Instruction>),
+    FnDef(Rc<String>, Vec<Instruction>),
     // function name, instructions
-    DataStr(String, String),
+    DataStr(Rc<String>, Rc<String>),
     // label name, content
-    Extern(String),
+    Extern(Rc<String>),
     // variable name, variable data type
-    StaticVar(String, DataType),
+    StaticVar(Rc<String>, DataType),
+}
+impl std::fmt::Display for TopLevelElement {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TopLevelElement::FnDef(name, instructions) => {
+                writeln!(formatter, "#fn_def {name} {{")?;
+                for instruction in instructions {
+                    instruction.fmt(formatter)?;
+                    writeln!(formatter)?;
+                }
+                writeln!(formatter, "}}")?;
+            }
+            TopLevelElement::DataStr(id, content) => {
+                writeln!(formatter, "{id}\t{content}")?;
+            }
+            TopLevelElement::Extern(label) => writeln!(formatter, "extern {label}")?,
+            TopLevelElement::StaticVar(name, dtype) => {
+                writeln!(formatter, "#static_var {name} {dtype}")?;
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct Program {
     pub content: Vec<TopLevelElement>,
-}
-impl Program {
-    pub fn parse_from(mut token_stream: TokenStream) -> Self {
-        let mut program = Program::default();
-        loop {
-            let mut token = match token_stream.next() {
-                Some(t) => t,
-                None => break,
-            };
-            match token.as_str() {
-                "#def_fn" => {
-                    let fn_name = token_stream.expected_next();
-
-                    if token_stream.expected_next() != "{" {
-                        panic!("expects `{{` after #def_fn {}", fn_name);
-                    }
-
-                    // parse body
-                    let mut body: Vec<Instruction> = Vec::new();
-                    loop {
-                        token = token_stream.expected_next();
-                        if token == "}" {
-                            break;
-                        }
-                        body.push(parse_instr(&mut token_stream, token));
-                    }
-                    program
-                        .content
-                        .push(TopLevelElement::FnDef(fn_name, body));
-                }
-                "#data_str" => {
-                    let label_name = token_stream.expected_next();
-                    let mut string = String::from(token_stream.next_non_whitespace_ch().expect("Unexpected EOF"));
-                    let mut is_in_escape = false;
-                    while let Some(ch) = token_stream.next_ch_until('\n') {
-                        if !is_in_escape {
-                            if ch == '\\' {
-                                is_in_escape = true;
-                            } else {
-                                string.push(ch);
-                            }
-                        } else {
-                            is_in_escape = false;
-                            match ch {
-                                'n' => string.push('\n'),
-                                '0' => string.push('\0'),
-                                '\\' => string.push('\\'),
-                                _ => panic!("unsupported escape character '{}'", ch),
-                            }
-                        }
-                    }
-                    program.content.push(TopLevelElement::DataStr(label_name, string));
-                }
-                "#extern" => {
-                    let label_name = token_stream.expected_next();
-                    program.content.push(TopLevelElement::Extern(label_name));
-                }
-                "#static_var" => {
-                    let var_name = token_stream.expected_next();
-                    let var_type = DataType::from_str(&token_stream.expected_next()).expect("cannot recognize data type");
-                    program.content.push(TopLevelElement::StaticVar(var_name, var_type));
-                }
-                _ => panic!("cannot recognize {:?}, it is either not an instruction or not allowed at top level", token),
-            }
-        }
-        program
-    }
-
-    // print the IR code for debug
-    pub fn print_code(&self) {
-        for toplevel_element in &self.content {
-            match toplevel_element {
-                TopLevelElement::FnDef(fn_name, instructions) => {
-                    println!("#fn_def {fn_name} {{");
-                    for instr in instructions {
-                        println!(
-                            "\t{}\t{}\t{}",
-                            instr.operation, instr.operand0, instr.operand1
-                        );
-                    }
-                    println!("}}");
-                }
-                TopLevelElement::DataStr(name, str) => {
-                    println!("#data_str {name}\t{str:?}");
-                }
-                TopLevelElement::Extern(name) => {
-                    println!("#extern {name}");
-                }
-                TopLevelElement::StaticVar(name, dtype) => {
-                    println!("#static_var {name} {dtype}");
-                }
-            }
-        }
-    }
-}
-
-pub fn parse_operand(tokens: &mut TokenStream) -> Operand {
-    let opcode_str = tokens.expected_next();
-    if opcode_str == "_" {
-        return Operand::default();
-    }
-    let dtype = DataType::from_str(&tokens.expected_next()).expect("cannot recognize data type");
-    let content = tokens.expected_next();
-    Operand {
-        dtype,
-        content: match opcode_str.as_str() {
-            "data" => OperandContent::Data(content.parse().expect("not an integar")),
-            "var" => OperandContent::Var(content),
-            "svar" => OperandContent::SVar(content),
-            "arg" => OperandContent::Arg(content.parse().expect("not an integar")),
-            "result" => OperandContent::Result,
-            "fn" => OperandContent::Fn(content),
-            "label" => OperandContent::Label(content),
-            "block" => todo!("block operand has not been implemented yet"),
-            _ => panic!("{} is not a valid operand", opcode_str),
-        },
-    }
-}
-
-pub fn parse_instr(token_stream: &mut TokenStream, current: String) -> Instruction {
-    let id = current;
-    let opcode =
-        OperationType::from_str(&id).unwrap_or_else(|| panic!("cannot recognize op `{}`", id));
-    match opcode {
-        OperationType::RawASM => {
-            let mut asm = String::from(
-                token_stream
-                    .next_non_whitespace_ch()
-                    .expect("Unexpected EOF"),
-            );
-            while let Some(ch) = token_stream.next_ch_until('\n') {
-                asm.push(ch);
-            }
-            Instruction {
-                operation: opcode,
-                operand0: Operand {
-                    dtype: DataType::Irrelavent,
-                    content: OperandContent::RawASM(asm),
-                },
-                operand1: Operand::default(),
-            }
-        }
-        OperationType::BlockStart => Instruction {
-            operation: opcode,
-            operand0: Operand {
-                dtype: DataType::Irrelavent,
-                content: OperandContent::SubBlock(Vec::new()),
-            },
-            operand1: Operand::default(),
-        },
-        _ => {
-            let operand0 = parse_operand(token_stream);
-            let operand1 = parse_operand(token_stream);
-            Instruction {
-                operation: opcode,
-                operand0,
-                operand1,
-            }
-        }
-    }
 }

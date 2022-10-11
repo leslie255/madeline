@@ -250,7 +250,7 @@ static ARG_REGS: [&'static str; 6] = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"];
 
 fn asm_for_operand(
     operand: &Operand,
-    var_addrs: &HashMap<String, u64>,
+    var_addrs: &HashMap<u64, u64>,
     fformat: FileFormat,
 ) -> String {
     match &operand.content {
@@ -279,14 +279,14 @@ fn asm_for_operand(
                     1 => "byte",
                     _ => panic!(),
                 },
-                fformat.label(var_name.clone())
+                fformat.label(var_name.to_string())
             )
         }
         OperandContent::Arg(arg_i) => {
             reg_name!(convert, ARG_REGS[*arg_i as usize], operand.dtype.size())
         }
         OperandContent::Result => reg_name!(rax, operand.dtype.size()),
-        OperandContent::Label(label) => fformat.label(label.clone()),
+        OperandContent::Label(label) => fformat.label(label.to_string()),
         _ => panic!("expects data, var, svar, arg, ret_val"),
     }
 }
@@ -294,7 +294,7 @@ fn asm_for_operand(
 fn move_instr(
     lhs: &Operand,
     rhs: &Operand,
-    var_addrs: &HashMap<String, u64>,
+    var_addrs: &HashMap<u64, u64>,
     fformat: FileFormat,
 ) -> String {
     match &rhs.content {
@@ -332,7 +332,7 @@ fn move_instr(
 fn move_to_reg(
     reg: &String,
     rhs: &Operand,
-    var_addrs: &HashMap<String, u64>,
+    var_addrs: &HashMap<u64, u64>,
     fformat: FileFormat,
 ) -> String {
     match &rhs.content {
@@ -347,10 +347,10 @@ fn move_to_reg(
     }
 }
 
-pub fn gen_instr(
+fn gen_instr(
     instr: &Instruction,
     fformat: FileFormat,
-    var_addrs: &HashMap<String, u64>,
+    var_addrs: &HashMap<u64, u64>,
     stack_depth: u64,
 ) -> String {
     macro_rules! op_prefix {
@@ -569,7 +569,7 @@ pub fn generate_asm(program: Program, fformat: FileFormat) -> String {
         match top_level_expr {
             TopLevelElement::FnDef(fn_name, body) => {
                 let mut stack_depth: u64 = 8;
-                let mut var_addrs = HashMap::<String, u64>::new();
+                let mut var_addrs = HashMap::<u64, u64>::new();
                 for (var_name, var_type) in body.iter().filter_map(|instr| {
                     if instr.operation == OperationType::DefVar {
                         Some((
@@ -592,7 +592,7 @@ pub fn generate_asm(program: Program, fformat: FileFormat) -> String {
                 if stack_depth == 8 {
                     stack_depth = 0;
                 }
-                code.push_str(&asm_code!(fn_prolog, fformat, fn_name, stack_depth));
+                code.push_str(&asm_code!(fn_prolog, fformat, fn_name.to_string(), stack_depth));
                 for instr in &body {
                     code.push_str(&gen_instr(instr, fformat, &var_addrs, stack_depth));
                 }
@@ -601,20 +601,20 @@ pub fn generate_asm(program: Program, fformat: FileFormat) -> String {
                 code.push_str(
                     format!(
                         "{}:\tdb {}0x00\n",
-                        fformat.label(label),
-                        asm_str_from(string)
+                        fformat.label(label.to_string()),
+                        asm_str_from(string.to_string())
                     )
                     .as_str(),
                 );
             }
             TopLevelElement::Extern(label) => {
-                code.push_str(format!("extern\t{}\n", fformat.label(label)).as_str());
+                code.push_str(format!("extern\t{}\n", fformat.label(label.to_string())).as_str());
             }
             TopLevelElement::StaticVar(name, dtype) => {
                 code.push_str(
                     format!(
                         "{}:\t{} 0\n",
-                        fformat.label(name),
+                        fformat.label(name.to_string()),
                         match dtype.size() {
                             8 => "dq",
                             4 => "dw",
