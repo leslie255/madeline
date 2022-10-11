@@ -332,7 +332,7 @@ impl std::fmt::Display for Instruction {
 pub enum TopLevelElement {
     FnDef(Rc<String>, Vec<Instruction>),
     // function name, instructions
-    DataStr(Rc<String>, Rc<String>),
+    DataStr(String, String),
     // label name, content
     Extern(Rc<String>),
     // variable name, variable data type
