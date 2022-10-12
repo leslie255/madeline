@@ -44,14 +44,17 @@ mod tests {
     #[test]
     fn variables() {
         let program = Program {
-            content: vec![TopLevelElement::FnDef(
-                s!("main"),
-                vec![
-                    i!(DefVar, o!(Signed64, Var, 0), o!()),
-                    i!(SetVar, o!(Signed64, Var, 0), o!(Signed64, Data, 255)),
-                    i!(RetVal, o!(Signed32, Data, 0), o!()),
-                ],
-            )],
+            content: vec![
+                TopLevelElement::DataStr("str".to_string(), "hello, world\n".to_string()),
+                TopLevelElement::FnDef(
+                    s!("main"),
+                    vec![
+                        i!(DefVar, o!(Signed64, Var, 0), o!()),
+                        i!(SetVar, o!(Signed64, Var, 0), o!(Signed64, Data, 255)),
+                        i!(RetVal, o!(Signed32, Data, 0), o!()),
+                    ],
+                ),
+            ],
         };
         println!("------------- macho64 -------------");
         println!(
