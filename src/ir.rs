@@ -210,6 +210,8 @@ pub enum OperationType {
     DefVar,
     SetVar,
     SetArg,
+    TakeAddr,
+    Deref,
     CallFn,
     RetVal,
     RetVoid,
@@ -237,32 +239,32 @@ pub enum OperationType {
 impl OperationType {
     pub fn from_str(s: &String) -> Option<Self> {
         match s.as_str() {
-            "def_var" => Some(OperationType::DefVar),
-            "set_var" => Some(OperationType::SetVar),
-            "set_arg" => Some(OperationType::SetArg),
-            "call_fn" => Some(OperationType::CallFn),
-            "ret_val" => Some(OperationType::RetVal),
-            "ret_void" => Some(OperationType::RetVoid),
-            "add" => Some(OperationType::Add),
-            "sub" => Some(OperationType::Sub),
-            "mul" => Some(OperationType::Mul),
-            "div" => Some(OperationType::Div),
-            "inc" => Some(OperationType::Inc),
-            "dec" => Some(OperationType::Dec),
-            "jmp" => Some(OperationType::Jmp),
-            "cmp" => Some(OperationType::Cmp),
-            "j=" => Some(OperationType::Je),
-            "j!=" => Some(OperationType::Jn),
-            "j=0" => Some(OperationType::Jz),
-            "j!=0" => Some(OperationType::Jnz),
-            "j>" => Some(OperationType::Jg),
-            "j>=" => Some(OperationType::Jnle),
-            "j<" => Some(OperationType::Jl),
-            "j<=" => Some(OperationType::Jnge),
-            "def_label" => Some(OperationType::Label),
-            "#block_start" => Some(OperationType::BlockStart),
-            "#block_end" => Some(OperationType::BlockEnd),
-            "raw_asm" => Some(OperationType::RawASM),
+            "def_var" => Some(Self::DefVar),
+            "set_var" => Some(Self::SetVar),
+            "set_arg" => Some(Self::SetArg),
+            "call_fn" => Some(Self::CallFn),
+            "ret_val" => Some(Self::RetVal),
+            "ret_void" => Some(Self::RetVoid),
+            "add" => Some(Self::Add),
+            "sub" => Some(Self::Sub),
+            "mul" => Some(Self::Mul),
+            "div" => Some(Self::Div),
+            "inc" => Some(Self::Inc),
+            "dec" => Some(Self::Dec),
+            "jmp" => Some(Self::Jmp),
+            "cmp" => Some(Self::Cmp),
+            "j=" => Some(Self::Je),
+            "j!=" => Some(Self::Jn),
+            "j=0" => Some(Self::Jz),
+            "j!=0" => Some(Self::Jnz),
+            "j>" => Some(Self::Jg),
+            "j>=" => Some(Self::Jnle),
+            "j<" => Some(Self::Jl),
+            "j<=" => Some(Self::Jnge),
+            "def_label" => Some(Self::Label),
+            "#block_start" => Some(Self::BlockStart),
+            "#block_end" => Some(Self::BlockEnd),
+            "raw_asm" => Some(Self::RawASM),
             _ => None,
         }
     }
@@ -273,32 +275,34 @@ impl std::fmt::Display for OperationType {
             formatter,
             "{}",
             match self {
-                OperationType::DefVar => "def_var",
-                OperationType::SetVar => "set_var",
-                OperationType::SetArg => "set_arg",
-                OperationType::CallFn => "call_fn",
-                OperationType::RetVal => "ret_val",
-                OperationType::RetVoid => "ret_void",
-                OperationType::Add => "add",
-                OperationType::Sub => "sub",
-                OperationType::Mul => "mul",
-                OperationType::Div => "div",
-                OperationType::Inc => "inc",
-                OperationType::Dec => "dec",
-                OperationType::Label => "label",
-                OperationType::BlockStart => "block_start",
-                OperationType::BlockEnd => "block_end",
-                OperationType::RawASM => "raw_asm",
-                OperationType::Jmp => "jmp",
-                OperationType::Cmp => "cmp",
-                OperationType::Je => "j=",
-                OperationType::Jn => "j!=",
-                OperationType::Jz => "j=0",
-                OperationType::Jnz => "j!=0",
-                OperationType::Jg => "j>",
-                OperationType::Jnle => "j>=",
-                OperationType::Jl => "j<",
-                OperationType::Jnge => "j<=",
+                Self::DefVar => "def_var",
+                Self::SetVar => "set_var",
+                Self::SetArg => "set_arg",
+                Self::Deref => "deref",
+                Self::TakeAddr => "take_addr",
+                Self::CallFn => "call_fn",
+                Self::RetVal => "ret_val",
+                Self::RetVoid => "ret_void",
+                Self::Add => "add",
+                Self::Sub => "sub",
+                Self::Mul => "mul",
+                Self::Div => "div",
+                Self::Inc => "inc",
+                Self::Dec => "dec",
+                Self::Label => "label",
+                Self::BlockStart => "block_start",
+                Self::BlockEnd => "block_end",
+                Self::RawASM => "raw_asm",
+                Self::Jmp => "jmp",
+                Self::Cmp => "cmp",
+                Self::Je => "j=",
+                Self::Jn => "j!=",
+                Self::Jz => "j=0",
+                Self::Jnz => "j!=0",
+                Self::Jg => "j>",
+                Self::Jnle => "j>=",
+                Self::Jl => "j<",
+                Self::Jnge => "j<=",
             }
         )?;
         Ok(())
@@ -335,7 +339,7 @@ pub enum TopLevelElement {
 impl std::fmt::Display for TopLevelElement {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TopLevelElement::FnDef(name, instructions) => {
+            Self::FnDef(name, instructions) => {
                 writeln!(formatter, "#fn_def {name} {{")?;
                 for instruction in instructions {
                     instruction.fmt(formatter)?;
@@ -343,11 +347,11 @@ impl std::fmt::Display for TopLevelElement {
                 }
                 writeln!(formatter, "}}")?;
             }
-            TopLevelElement::DataStr(id, content) => {
+            Self::DataStr(id, content) => {
                 writeln!(formatter, "{id}\t{content}")?;
             }
-            TopLevelElement::Extern(label) => writeln!(formatter, "extern {label}")?,
-            TopLevelElement::StaticVar(name, dtype) => {
+            Self::Extern(label) => writeln!(formatter, "extern {label}")?,
+            Self::StaticVar(name, dtype) => {
                 writeln!(formatter, "#static_var {name} {dtype}")?;
             }
         }

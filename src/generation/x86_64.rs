@@ -412,6 +412,39 @@ fn gen_instr(
             );
             move_to_reg(&arg_reg, &instr.operand1, &var_addrs, fformat)
         }
+        OperationType::Deref => {
+            let size = dtype_size(instr.operand1.dtype);
+            let rax = reg_name!(rax, size);
+            match &instr.operand0.content {
+                OperandContent::Data(_) => format!(
+                    "{}\tmov\t{rax}, qword [rax]\n",
+                    move_to_reg(&"rax".to_string(), &instr.operand0, var_addrs, fformat)
+                ),
+                OperandContent::Var(var_id) => {
+                    format!(
+                        "\tmov\trax, qword [rbp - {}]\n\tmov\t{}, qword [rax]\n",
+                        var_addrs.get(var_id).unwrap(),
+                        rax
+                    )
+                }
+                OperandContent::SVar(_) => todo!(),
+                OperandContent::Arg(_) => todo!(),
+                _ => panic!(),
+            }
+        }
+        OperationType::TakeAddr => {
+            match &instr.operand0.content {
+                OperandContent::Var(var_id) => {
+                    format!(
+                        "\tlea\trax, [rbp - {}]\n",
+                        var_addrs.get(var_id).unwrap(),
+                    )
+                }
+                OperandContent::SVar(_) => todo!(),
+                OperandContent::Arg(_) => todo!(),
+                _ => panic!(),
+            }
+        }
         OperationType::CallFn => {
             format!(
                 "\tcall\t{}\n",
