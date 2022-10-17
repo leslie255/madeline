@@ -420,31 +420,26 @@ fn gen_instr(
                     "{}\tmov\t{rax}, qword [rax]\n",
                     move_to_reg(&"rax".to_string(), &instr.operand0, var_addrs, fformat)
                 ),
-                OperandContent::Var(var_id) => {
-                    format!(
-                        "\tmov\trax, qword [rbp - {}]\n\tmov\t{}, qword [rax]\n",
-                        var_addrs.get(var_id).unwrap(),
-                        rax
-                    )
-                }
+                OperandContent::Var(var_id) => format!(
+                    "\tmov\trax, qword [rbp - {}]\n\tmov\t{}, qword [rax]\n",
+                    var_addrs.get(var_id).unwrap(),
+                    rax
+                ),
+
                 OperandContent::SVar(_) => todo!(),
                 OperandContent::Arg(_) => todo!(),
+                OperandContent::Result => format!("\tmov\t{}, qword [rax]\n", rax),
                 _ => panic!(),
             }
         }
-        OperationType::TakeAddr => {
-            match &instr.operand0.content {
-                OperandContent::Var(var_id) => {
-                    format!(
-                        "\tlea\trax, [rbp - {}]\n",
-                        var_addrs.get(var_id).unwrap(),
-                    )
-                }
-                OperandContent::SVar(_) => todo!(),
-                OperandContent::Arg(_) => todo!(),
-                _ => panic!(),
+        OperationType::TakeAddr => match &instr.operand0.content {
+            OperandContent::Var(var_id) => {
+                format!("\tlea\trax, [rbp - {}]\n", var_addrs.get(var_id).unwrap(),)
             }
-        }
+            OperandContent::SVar(_) => todo!(),
+            OperandContent::Arg(_) => todo!(),
+            _ => panic!(),
+        },
         OperationType::CallFn => {
             format!(
                 "\tcall\t{}\n",
