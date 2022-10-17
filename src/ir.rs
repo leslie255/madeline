@@ -12,6 +12,9 @@ pub enum DataType {
     Signed8,
     Float64,
     Float32,
+    Pointer,
+    UnsignedSize,
+    SignedSize,
     Irrelavent,
 }
 impl DataType {
@@ -27,23 +30,11 @@ impl DataType {
             "i8" => Some(Self::Signed8),
             "f64" => Some(Self::Float64),
             "f32" => Some(Self::Float32),
+            "ptr" => Some(Self::Pointer),
+            "usize" => Some(Self::UnsignedSize),
+            "isize" => Some(Self::SignedSize),
             "_" => Some(Self::Irrelavent),
             _ => None,
-        }
-    }
-    pub fn size(&self) -> u64 {
-        match self {
-            Self::Unsigned64 => 8,
-            Self::Unsigned32 => 4,
-            Self::Unsigned16 => 2,
-            Self::Unsigned8 => 1,
-            Self::Signed64 => 8,
-            Self::Signed32 => 4,
-            Self::Signed16 => 2,
-            Self::Signed8 => 1,
-            Self::Float64 => 8,
-            Self::Float32 => 4,
-            Self::Irrelavent => 0,
         }
     }
 }
@@ -53,17 +44,20 @@ impl std::fmt::Display for DataType {
             formatter,
             "{} ",
             match &self {
-                DataType::Unsigned64 => "u64",
-                DataType::Unsigned32 => "u32",
-                DataType::Unsigned16 => "u16",
-                DataType::Unsigned8 => "u8",
-                DataType::Signed64 => "i64",
-                DataType::Signed32 => "i32",
-                DataType::Signed16 => "i16",
-                DataType::Signed8 => "i8",
-                DataType::Float64 => "f64",
-                DataType::Float32 => "f32",
-                DataType::Irrelavent => "_",
+                Self::Unsigned64 => "u64",
+                Self::Unsigned32 => "u32",
+                Self::Unsigned16 => "u16",
+                Self::Unsigned8 => "u8",
+                Self::Signed64 => "i64",
+                Self::Signed32 => "i32",
+                Self::Signed16 => "i16",
+                Self::Signed8 => "i8",
+                Self::Float64 => "f64",
+                Self::Float32 => "f32",
+                Self::Pointer => "ptr",
+                Self::UnsignedSize => "usize",
+                Self::SignedSize => "isize",
+                Self::Irrelavent => "_",
             }
         )?;
         return Ok(());

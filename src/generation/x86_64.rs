@@ -4,6 +4,25 @@ use super::str_fmt::*;
 
 use std::collections::HashMap;
 
+pub fn dtype_size(dtype: DataType) -> u64 {
+    match dtype {
+        DataType::Unsigned64 => 8,
+        DataType::Unsigned32 => 4,
+        DataType::Unsigned16 => 2,
+        DataType::Unsigned8 => 1,
+        DataType::Signed64 => 8,
+        DataType::Signed32 => 4,
+        DataType::Signed16 => 2,
+        DataType::Signed8 => 1,
+        DataType::Float64 => 8,
+        DataType::Float32 => 4,
+        DataType::Pointer => 8,
+        DataType::UnsignedSize => 8,
+        DataType::SignedSize => 8,
+        DataType::Irrelavent => 0,
+    }
+}
+
 macro_rules! reg_name {
     (convert, $name: expr, $len: expr) => {
         String::from(match ($name, $len) {
@@ -259,7 +278,7 @@ fn asm_for_operand(
             let var_addr = var_addrs.get(var_name).expect("undefined variable");
             format!(
                 "{} [rbp - {}]",
-                match operand.dtype.size() {
+                match dtype_size(operand.dtype) {
                     8 => "qword",
                     4 => "dword",
                     2 => "bword",
@@ -272,7 +291,7 @@ fn asm_for_operand(
         OperandContent::SVar(var_name) => {
             format!(
                 "{} [rel {}]",
-                match operand.dtype.size() {
+                match dtype_size(operand.dtype) {
                     8 => "qword",
                     4 => "dword",
                     2 => "bword",
@@ -283,9 +302,13 @@ fn asm_for_operand(
             )
         }
         OperandContent::Arg(arg_i) => {
-            reg_name!(convert, ARG_REGS[*arg_i as usize], operand.dtype.size())
+            reg_name!(
+                convert,
+                ARG_REGS[*arg_i as usize],
+                dtype_size(operand.dtype)
+            )
         }
-        OperandContent::Result => reg_name!(rax, operand.dtype.size()),
+        OperandContent::Result => reg_name!(rax, dtype_size(operand.dtype)),
         OperandContent::Label(label) => fformat.label(label.to_string()),
         _ => panic!("expects data, var, svar, arg, ret_val"),
     }
@@ -299,7 +322,7 @@ fn move_instr(
 ) -> String {
     match &rhs.content {
         OperandContent::Var(_) | OperandContent::SVar(_) => {
-            let rax = reg_name!(rax, lhs.dtype.size());
+            let rax = reg_name!(rax, dtype_size(lhs.dtype));
             format!(
                 "\tmov\t{}, {}\n\tmov\t{}, {}\n",
                 rax,
@@ -310,7 +333,7 @@ fn move_instr(
         }
         _ => {
             if let OperandContent::SVar(_) = lhs.content {
-                let rax = reg_name!(rax, lhs.dtype.size());
+                let rax = reg_name!(rax, dtype_size(lhs.dtype));
                 format!(
                     "\tmov\t{}, {}\n\tmov\t{}, {}\n",
                     rax,
@@ -362,11 +385,14 @@ fn gen_instr(
                 DataType::Unsigned64
                 | DataType::Unsigned32
                 | DataType::Unsigned16
-                | DataType::Unsigned8 => "",
+                | DataType::Unsigned8
+                | DataType::UnsignedSize
+                | DataType::Pointer => "",
                 DataType::Signed64
                 | DataType::Signed32
                 | DataType::Signed16
-                | DataType::Signed8 => "i",
+                | DataType::Signed8
+                | DataType::SignedSize => "i",
                 DataType::Float64 | DataType::Float32 => "f",
                 DataType::Irrelavent => "",
             }
@@ -382,7 +408,7 @@ fn gen_instr(
             let arg_reg = reg_name!(
                 convert,
                 ARG_REGS[arg_i as usize],
-                instr.operand0.dtype.size()
+                dtype_size(instr.operand0.dtype)
             );
             move_to_reg(&arg_reg, &instr.operand1, &var_addrs, fformat)
         }
@@ -395,7 +421,7 @@ fn gen_instr(
         OperationType::RetVal => {
             instr.operand1.content.expect_empty();
             let mut code = String::new();
-            let rax = reg_name!(rax, instr.operand0.dtype.size());
+            let rax = reg_name!(rax, dtype_size(instr.operand0.dtype));
             code.push_str(&move_to_reg(&rax, &instr.operand0, &var_addrs, fformat));
             code.push_str(asm_code!(fn_epilog, stack_depth).as_str());
             code
@@ -407,7 +433,7 @@ fn gen_instr(
             code
         }
         OperationType::Add => {
-            let rax = reg_name!(rax, instr.operand0.dtype.size());
+            let rax = reg_name!(rax, dtype_size(instr.operand0.dtype));
             format!(
                 "\tmov\t{}, {}\n\t{}add\t{}, {}\n",
                 rax,
@@ -418,7 +444,7 @@ fn gen_instr(
             )
         }
         OperationType::Sub => {
-            let rax = reg_name!(rax, instr.operand0.dtype.size());
+            let rax = reg_name!(rax, dtype_size(instr.operand0.dtype));
             format!(
                 "\tmov\t{}, {}\n\t{}sub\t{}, {}\n",
                 rax,
@@ -429,7 +455,7 @@ fn gen_instr(
             )
         }
         OperationType::Mul => {
-            let rax = reg_name!(rax, instr.operand0.dtype.size());
+            let rax = reg_name!(rax, dtype_size(instr.operand0.dtype));
             format!(
                 "\tmov\t{}, {}\n\t{}mul\t{}\n",
                 rax,
@@ -439,7 +465,7 @@ fn gen_instr(
             )
         }
         OperationType::Div => {
-            let rax = reg_name!(rax, instr.operand0.dtype.size());
+            let rax = reg_name!(rax, dtype_size(instr.operand0.dtype));
             format!(
                 "\tmov\t{}, {}\n\t{}div\t{}\n\t",
                 rax,
@@ -452,7 +478,7 @@ fn gen_instr(
             format!("\t{}\n", instr.operand0.content.expect_raw_asm())
         }
         OperationType::Inc => {
-            let rax = reg_name!(rax, instr.operand0.dtype.size());
+            let rax = reg_name!(rax, dtype_size(instr.operand0.dtype));
             format!(
                 "\tmov\t{}, {}\n\tinc\t{}\n\tmov\t{}, {}\n",
                 rax,
@@ -463,7 +489,7 @@ fn gen_instr(
             )
         }
         OperationType::Dec => {
-            let rax = reg_name!(rax, instr.operand0.dtype.size());
+            let rax = reg_name!(rax, dtype_size(instr.operand0.dtype));
             format!(
                 "\tmov\t{}, {}\n\tdec\t{}\n\tmov\t{}, {}\n",
                 rax,
@@ -486,7 +512,7 @@ fn gen_instr(
         OperationType::Cmp => match (&instr.operand0.content, &instr.operand1.content) {
             (OperandContent::Var(..), OperandContent::Var(..)) => {
                 let var2_addr = asm_for_operand(&instr.operand1, var_addrs, fformat);
-                let rax = reg_name!(rax, instr.operand0.dtype.size());
+                let rax = reg_name!(rax, dtype_size(instr.operand0.dtype));
                 format!(
                     "\tmov\t{}, {}\n\tcmp\t{}, {}\n",
                     rax,
@@ -584,15 +610,21 @@ pub fn generate_asm(program: Program, fformat: FileFormat) -> String {
                         None
                     }
                 }) {
-                    if var_type.size() != 0 {
+                    let size = dtype_size(var_type);
+                    if size != 0 {
                         var_addrs.insert(var_name.clone(), stack_depth);
-                        stack_depth += var_type.size();
+                        stack_depth += dtype_size(var_type);
                     }
                 }
                 if stack_depth == 8 {
                     stack_depth = 0;
                 }
-                code.push_str(&asm_code!(fn_prolog, fformat, fn_name.to_string(), stack_depth));
+                code.push_str(&asm_code!(
+                    fn_prolog,
+                    fformat,
+                    fn_name.to_string(),
+                    stack_depth
+                ));
                 for instr in &body {
                     code.push_str(&gen_instr(instr, fformat, &var_addrs, stack_depth));
                 }
@@ -615,7 +647,7 @@ pub fn generate_asm(program: Program, fformat: FileFormat) -> String {
                     format!(
                         "{}:\t{} 0\n",
                         fformat.label(name.to_string()),
-                        match dtype.size() {
+                        match dtype_size(dtype) {
                             8 => "dq",
                             4 => "dw",
                             2 => "dd",

@@ -49,9 +49,9 @@ mod tests {
                 TopLevelElement::FnDef(
                     s!("main"),
                     vec![
-                        i!(DefVar, o!(Signed64, Var, 0), o!()),
-                        i!(SetVar, o!(Signed64, Var, 0), o!(Signed64, Data, 255)),
-                        i!(RetVal, o!(Signed32, Data, 0), o!()),
+                        i!(DefVar, o!(SignedSize, Var, 0), o!()),
+                        i!(SetVar, o!(SignedSize, Var, 0), o!(Unsigned64, Data, 255)),
+                        i!(RetVal, o!(Unsigned32, Data, 0), o!()),
                     ],
                 ),
             ],
