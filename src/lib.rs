@@ -63,6 +63,7 @@ mod tests {
                     vec![
                         i!(DefVar, o!(SignedSize, Var, 0), o!()),
                         i!(SetVar, o!(SignedSize, Var, 0), o!(Unsigned64, Data, 255)),
+                        i!(DefVar, o!(SignedSize, Var, 1), o!()),
                         i!(RetVal, o!(Unsigned32, Data, 0), o!()),
                     ],
                 ),

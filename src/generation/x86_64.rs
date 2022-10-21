@@ -646,6 +646,9 @@ pub fn generate_asm(program: Program, fformat: FileFormat) -> String {
                 }
                 if stack_depth == 8 {
                     stack_depth = 0;
+                } else {
+                    // stack depth must be a multiple of 16
+                    stack_depth += stack_depth % 16;
                 }
                 code.push_str(&asm_code!(
                     fn_prolog,
