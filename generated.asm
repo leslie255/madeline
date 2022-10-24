@@ -4,17 +4,24 @@ _fmt:   db 0x25, 0x6C, 0x6C, 0x75, 0x0A, 0x00
 _main:
         push    rbp
         mov     rbp, rsp
-        sub     rsp, 32
-        mov     qword [rbp - 8], 42
-        lea     rax, [rbp - 8]
-        mov     qword [rbp - 16], rax
-        mov     rax, qword [rbp - 16]
-        mov     rax, qword [rax]
-        mov     qword [rbp - 24], rax
-        mov     rdi, _fmt
-        mov     rsi, qword [rbp - 24]
-        call    _printf
+        sub     rsp, 16
+
+
+        mov     rcx, 0
+        cmp     rcx, qword [rbp - 8]
+
+
+        mov     rcx, 0
+        cmp     0, rcx
+
+
+        mov     rcx, 0
+        mov     rdx, 1
+        cmp     rcx, rdx
+
+
         xor     eax, eax
-        add     rsp, 32
+        add     rsp, 16
         pop     rbp
         ret
+

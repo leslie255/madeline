@@ -120,4 +120,46 @@ mod tests {
             generation::x86_64::generate_asm(program.clone(), FileFormat::Elf64)
         );
     }
+
+    #[test]
+    fn cmp() {
+        let newline = Instruction {
+            operation: OperationType::RawASM,
+            operand0: Operand {
+                dtype: DataType::Irrelavent,
+                content: OperContent::RawASM(s!("\n")),
+            },
+            operand1: Operand::default(),
+        };
+        let program = Program {
+            content: vec![
+                TopLevelElement::Extern(s!("printf")),
+                TopLevelElement::DataStr("fmt".to_string(), "%llu\n".to_string()),
+                TopLevelElement::FnDef(
+                    s!("main"),
+                    vec![
+                        i!(DefVar, o!(Unsigned64, Var, 0), o!()),
+                        newline.clone(),
+                        i!(Cmp, o!(UnsignedSize, Data, 0), o!(UnsignedSize, Var, 0)),
+                        newline.clone(),
+                        i!(Cmp, o!(UnsignedSize, Var, 0), o!(UnsignedSize, Data, 0)),
+                        newline.clone(),
+                        i!(Cmp, o!(UnsignedSize, Data, 0), o!(UnsignedSize, Data, 1)),
+                        newline.clone(),
+                        i!(RetVal, o!(Unsigned32, Data, 0), o!()),
+                    ],
+                ),
+            ],
+        };
+        println!("------------- macho64 -------------");
+        println!(
+            "{}",
+            generation::x86_64::generate_asm(program.clone(), FileFormat::Macho64)
+        );
+        println!("-------------- elf64 --------------");
+        println!(
+            "{}",
+            generation::x86_64::generate_asm(program.clone(), FileFormat::Elf64)
+        );
+    }
 }

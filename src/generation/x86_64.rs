@@ -549,6 +549,34 @@ fn gen_instr(
                     asm_for_operand(&instr.operand0, var_addrs, fformat),
                 )
             }
+            (OperandContent::Data(num0), OperandContent::Data(num1)) => {
+                let rcx = reg_name!(rcx, dtype_size(instr.operand0.dtype));
+                let rdx = reg_name!(rdx, dtype_size(instr.operand1.dtype));
+                format!(
+                    "\tmov\t{}, {}\n\tmov\t{}, {}\n\tcmp\t{}, {}\n",
+                    rcx, num0, rdx, num1, rcx, rdx,
+                )
+            }
+            (OperandContent::Data(num), _) => {
+                let rcx = reg_name!(rcx, dtype_size(instr.operand0.dtype));
+                format!(
+                    "\tmov\t{}, {}\n\tcmp\t{}, {}\n",
+                    rcx,
+                    num,
+                    rcx,
+                    asm_for_operand(&instr.operand1, var_addrs, fformat),
+                )
+            }
+            (_, OperandContent::Data(num)) => {
+                let rcx = reg_name!(rcx, dtype_size(instr.operand0.dtype));
+                format!(
+                    "\tmov\t{}, {}\n\tcmp\t{}, {}\n",
+                    rcx,
+                    num,
+                    asm_for_operand(&instr.operand0, var_addrs, fformat),
+                    rcx,
+                )
+            }
             _ => {
                 format!(
                     "\tcmp\t{}, {}\n",
