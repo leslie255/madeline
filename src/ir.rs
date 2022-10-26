@@ -233,8 +233,8 @@ pub enum OperationType {
     Jnz,
     Jg,
     Jl,
-    Jnge,
-    Jnle,
+    Jle,
+    Jge,
 }
 impl OperationType {
     pub fn from_str(s: &String) -> Option<Self> {
@@ -258,9 +258,9 @@ impl OperationType {
             "j=0" => Some(Self::Jz),
             "j!=0" => Some(Self::Jnz),
             "j>" => Some(Self::Jg),
-            "j>=" => Some(Self::Jnle),
+            "j>=" => Some(Self::Jge),
             "j<" => Some(Self::Jl),
-            "j<=" => Some(Self::Jnge),
+            "j<=" => Some(Self::Jge),
             "def_label" => Some(Self::Label),
             "#block_start" => Some(Self::BlockStart),
             "#block_end" => Some(Self::BlockEnd),
@@ -300,9 +300,9 @@ impl std::fmt::Display for OperationType {
                 Self::Jz => "j=0",
                 Self::Jnz => "j!=0",
                 Self::Jg => "j>",
-                Self::Jnle => "j>=",
+                Self::Jge => "j>=",
                 Self::Jl => "j<",
-                Self::Jnge => "j<=",
+                Self::Jle => "j<=",
             }
         )?;
         Ok(())

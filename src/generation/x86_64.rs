@@ -627,17 +627,17 @@ fn gen_instr(
                 fformat.label(instr.operand0.content.expect_label().clone())
             )
         }
-        OperationType::Jnge => {
+        OperationType::Jge => {
             instr.operand1.content.expect_empty();
             format!(
-                "\tjnge\t{}\n",
+                "\tjge\t{}\n",
                 fformat.label(instr.operand0.content.expect_label().clone())
             )
         }
-        OperationType::Jnle => {
+        OperationType::Jle => {
             instr.operand1.content.expect_empty();
             format!(
-                "\tjnle\t{}\n",
+                "\tjle\t{}\n",
                 fformat.label(instr.operand0.content.expect_label().clone())
             )
         }
