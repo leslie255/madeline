@@ -281,7 +281,7 @@ fn asm_for_operand(
                 match dtype_size(operand.dtype) {
                     8 => "qword",
                     4 => "dword",
-                    2 => "bword",
+                    2 => "word",
                     1 => "byte",
                     _ => panic!(),
                 },
@@ -294,7 +294,7 @@ fn asm_for_operand(
                 match dtype_size(operand.dtype) {
                     8 => "qword",
                     4 => "dword",
-                    2 => "bword",
+                    2 => "word",
                     1 => "byte",
                     _ => panic!(),
                 },
