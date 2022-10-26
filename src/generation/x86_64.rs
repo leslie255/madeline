@@ -676,7 +676,11 @@ pub fn generate_asm(program: Program, fformat: FileFormat) -> String {
                     stack_depth = 0;
                 } else {
                     // stack depth must be a multiple of 16
-                    stack_depth += stack_depth % 16;
+                    println!("{}:{}\t{stack_depth}", file!(), line!());
+                    if stack_depth % 16 != 0 {
+                        // align the stack to a multiple of 16
+                        stack_depth = (stack_depth / 16 ) * 16 + 16;
+                    }
                 }
                 code.push_str(&asm_code!(
                     fn_prolog,

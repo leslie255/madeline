@@ -54,16 +54,15 @@ mod tests {
     }
 
     #[test]
-    fn variables() {
+    fn stack() {
         let program = Program {
             content: vec![
                 TopLevelElement::DataStr("str".to_string(), "hello, world\n".to_string()),
                 TopLevelElement::FnDef(
                     s!("main"),
                     vec![
-                        i!(DefVar, o!(SignedSize, Var, 0), o!()),
-                        i!(SetVar, o!(SignedSize, Var, 0), o!(Unsigned64, Data, 255)),
-                        i!(DefVar, o!(SignedSize, Var, 1), o!()),
+                        i!(DefVar, o!(Signed64, Var, 0), o!()),
+                        i!(DefVar, o!(Signed32, Var, 1), o!()),
                         i!(RetVal, o!(Unsigned32, Data, 0), o!()),
                     ],
                 ),
