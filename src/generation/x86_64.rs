@@ -324,7 +324,12 @@ fn move_instr(
         OperandContent::Var(_) | OperandContent::SVar(_) => {
             let rax = reg_name!(rax, dtype_size(lhs.dtype));
             format!(
-                "\tmov\t{}, {}\n\tmov\t{}, {}\n",
+                "\t{}\t{}, {}\n\tmov\t{}, {}\n",
+                if dtype_size(rhs.dtype) < dtype_size(lhs.dtype) {
+                    "movzx"
+                } else {
+                    "mov"
+                },
                 rax,
                 asm_for_operand(rhs, var_addrs, fformat),
                 asm_for_operand(lhs, var_addrs, fformat),
@@ -335,7 +340,12 @@ fn move_instr(
             if let OperandContent::SVar(_) = lhs.content {
                 let rax = reg_name!(rax, dtype_size(lhs.dtype));
                 format!(
-                    "\tmov\t{}, {}\n\tmov\t{}, {}\n",
+                    "\t{}\t{}, {}\n\tmov\t{}, {}\n",
+                    if dtype_size(rhs.dtype) < dtype_size(lhs.dtype) {
+                        "movzx"
+                    } else {
+                        "mov"
+                    },
                     rax,
                     asm_for_operand(rhs, var_addrs, fformat),
                     asm_for_operand(lhs, var_addrs, fformat),
@@ -679,7 +689,7 @@ pub fn generate_asm(program: Program, fformat: FileFormat) -> String {
                     println!("{}:{}\t{stack_depth}", file!(), line!());
                     if stack_depth % 16 != 0 {
                         // align the stack to a multiple of 16
-                        stack_depth = (stack_depth / 16 ) * 16 + 16;
+                        stack_depth = (stack_depth / 16) * 16 + 16;
                     }
                 }
                 code.push_str(&asm_code!(

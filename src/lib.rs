@@ -54,6 +54,32 @@ mod tests {
     }
 
     #[test]
+    fn upcast() {
+        let program = Program {
+            content: vec![TopLevelElement::FnDef(
+                s!("main"),
+                vec![
+                    i!(DefVar, o!(Unsigned8, Var, 0), o!()),
+                    i!(DefVar, o!(Unsigned64, Var, 1), o!()),
+                    i!(SetVar, o!(Unsigned8, Var, 0), o!(Unsigned64, Data, 42)),
+                    i!(SetVar, o!(Unsigned64, Var, 0), o!(Unsigned8, Var, 1)),
+                    i!(RetVal, o!(Unsigned32, Data, 0), o!()),
+                ],
+            )],
+        };
+        println!("------------- macho64 -------------");
+        println!(
+            "{}",
+            generation::x86_64::generate_asm(program.clone(), FileFormat::Macho64)
+        );
+        println!("-------------- elf64 --------------");
+        println!(
+            "{}",
+            generation::x86_64::generate_asm(program.clone(), FileFormat::Elf64)
+        );
+    }
+
+    #[test]
     fn stack() {
         let program = Program {
             content: vec![
