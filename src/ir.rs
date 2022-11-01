@@ -17,6 +17,7 @@ pub enum DataType {
     Ptr,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum Instruction {
     Var(DataType, u64),
     Arg(DataType, u64),
@@ -24,28 +25,30 @@ pub enum Instruction {
     UInt(DataType, u64),
     Int(DataType, i64),
     Float(DataType, f64),
+    String(Vec<u8>),
 
     Add(Box<Self>, Box<Self>),
     Sub(Box<Self>, Box<Self>),
     Mul(Box<Self>, Box<Self>),
     Div(Box<Self>, Box<Self>),
 
-    Load(Box<Self>),
+    Load { id: u64, dtype: DataType },
 
-    AllocVar { id: u64, dtype: DataType },
-    DefReg { id: u64, dtype: DataType },
+    Alloc(DataType),
+    DefReg { id: u64, rhs: Box<Self> },
 
     Store { id: u64, rhs: Box<Self> },
-    Ret(Box<Self>),
+    Ret(Option<Box<Self>>),
 
     Label(Rc<String>),
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum TopLevel {
     Extern(Rc<String>),
     Fn {
         name: Rc<String>,
-        args: Vec<(u64, DataType)>,
+        args: Vec<DataType>,
         body: Vec<Instruction>,
     },
 }

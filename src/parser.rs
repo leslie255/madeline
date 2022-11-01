@@ -1,15 +1,15 @@
 #![allow(dead_code)]
 
-use std::{iter::Peekable, rc::Rc, str::Chars};
+use std::iter::Peekable;
+use std::rc::Rc;
+use std::str::Chars;
 
-use super::ir::DataType;
+use super::ir::{DataType, Instruction, TopLevel};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     Fn,
     Extern,
-    Store,
-    Load,
     Call,
     Alloc,
     Ret,
@@ -27,8 +27,6 @@ pub enum Token {
 
     Equal,
     Comma,
-    Dot,
-    SmallerThan,
     ParenOpen,
     ParenClose,
     RectParenOpen,
@@ -42,6 +40,7 @@ pub enum Token {
 
     String(Vec<u8>),
 
+    Label(Rc<String>),
     FnName(Rc<String>),
     RegID(u64),
     ArgID(u64),
@@ -50,7 +49,49 @@ pub enum Token {
     LineBreak,
 }
 
-pub fn parse_into_tokens(source: String) -> Vec<Token> {
+impl Token {
+    pub fn as_fn_name(&self) -> Option<&Rc<String>> {
+        if let Self::FnName(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
+    /// Returns `true` if the token is [`LineBreak`].
+    ///
+    /// [`LineBreak`]: Token::LineBreak
+    #[must_use]
+    pub fn is_line_break(&self) -> bool {
+        matches!(self, Self::LineBreak)
+    }
+
+    /// Returns `true` if the token is [`BraceClose`].
+    ///
+    /// [`BraceClose`]: Token::BraceClose
+    #[must_use]
+    pub fn is_brace_close(&self) -> bool {
+        matches!(self, Self::BraceClose)
+    }
+
+    pub fn as_type_name(&self) -> Option<&DataType> {
+        if let Self::TypeName(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_reg_id(&self) -> Option<&u64> {
+        if let Self::RegID(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+}
+
+pub fn parse_string_into_tokens(source: String) -> Vec<Token> {
     let mut tokens = Vec::<Token>::new();
     let mut chars_iter = source.chars().peekable();
     loop {
@@ -60,6 +101,11 @@ pub fn parse_into_tokens(source: String) -> Vec<Token> {
         };
         if first_ch.is_whitespace() {
             if first_ch == '\n' {
+                if let Some(peek) = chars_iter.peek() {
+                    if *peek == '\n' {
+                        continue;
+                    }
+                }
                 tokens.push(Token::LineBreak);
             }
             continue;
@@ -73,8 +119,6 @@ pub fn parse_into_tokens(source: String) -> Vec<Token> {
             match word.as_str() {
                 "fn" => tokens.push(Token::Fn),
                 "extern" => tokens.push(Token::Extern),
-                "store" => tokens.push(Token::Store),
-                "load" => tokens.push(Token::Load),
                 "call" => tokens.push(Token::Call),
                 "alloc" => tokens.push(Token::Alloc),
                 "ret" => tokens.push(Token::Ret),
@@ -107,7 +151,6 @@ pub fn parse_into_tokens(source: String) -> Vec<Token> {
         match first_ch {
             '=' => tokens.push(Token::Equal),
             ',' => tokens.push(Token::Comma),
-            '.' => tokens.push(Token::Dot),
             '(' => tokens.push(Token::ParenOpen),
             ')' => tokens.push(Token::ParenClose),
             '[' => tokens.push(Token::RectParenOpen),
@@ -125,11 +168,15 @@ pub fn parse_into_tokens(source: String) -> Vec<Token> {
             '#' => tokens.push(Token::ArgID(
                 (collect_ch!(|c| c.is_numeric())).parse().unwrap(),
             )),
-            '\"' => tokens.push(parse_string(&mut chars_iter)),
+            ':' => tokens.push(Token::Label(Rc::new(collect_ch!(|c| c
+                .is_ascii_alphanumeric()
+                || *c == '_'
+                || *c == '.')))),
             '@' => tokens.push(Token::FnName(Rc::new(collect_ch!(|c| c
                 .is_ascii_alphanumeric()
                 || *c == '_'
                 || *c == '.')))),
+            '\"' => tokens.push(parse_string(&mut chars_iter)),
             '/' => while chars_iter.next_if(|c| *c != '\n').is_some() {},
             _ => panic!("cannot recognize {first_ch:?}"),
         }
@@ -324,6 +371,132 @@ fn parse_string(chars_iter: &mut Peekable<Chars>) -> Token {
                 .for_each(|b| bytes.push(*b)),
         }
     }
-    println!();
     Token::String(bytes)
+}
+
+struct TokenStream<'a> {
+    tokens: &'a Vec<Token>,
+    i: usize,
+}
+
+impl<'a> TokenStream<'a> {
+    fn new(tokens: &'a Vec<Token>) -> Self {
+        TokenStream { tokens, i: 0 }
+    }
+    fn is_end(&self) -> bool {
+        self.i >= self.tokens.len() - 1
+    }
+}
+
+impl<'a> Iterator for TokenStream<'a> {
+    type Item = &'a Token;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let t = self.tokens.get(self.i);
+        self.i += 1;
+        t
+    }
+}
+
+pub fn parse_tokens_into_ir(tokens: Vec<Token>) -> Vec<TopLevel> {
+    let mut ir = Vec::<TopLevel>::new();
+    let mut token_stream = TokenStream::new(&tokens).peekable();
+    loop {
+        token_stream.next_if(|t| t.is_line_break());
+        if let Some(i) = parse_top_level(&mut token_stream) {
+            ir.push(i);
+        } else {
+            break;
+        }
+    }
+    return ir;
+}
+
+fn parse_top_level(token_stream: &mut Peekable<TokenStream>) -> Option<TopLevel> {
+    let current = token_stream.next()?;
+    match current {
+        Token::Fn => {
+            let name = Rc::clone(token_stream.next()?.as_fn_name()?);
+            let mut args = Vec::<DataType>::new();
+            let mut body = Vec::<Instruction>::new();
+            token_stream.next()?; // ParenOpen
+            loop {
+                match token_stream.next()? {
+                    Token::TypeName(t) => args.push(*t),
+                    Token::ParenClose => break,
+                    _ => panic!("Expects `)` or type name after `@{name}`"),
+                }
+            }
+            token_stream.next()?; // BraceOpen
+            loop {
+                token_stream.next_if(|t| t.is_line_break());
+                if token_stream.peek()?.is_brace_close() {
+                    break;
+                }
+                body.push(parse_fn_body(token_stream)?);
+            }
+            token_stream.next()?; // BraceClose
+            Some(TopLevel::Fn { name, args, body })
+        }
+        Token::Extern => todo!(),
+        t => panic!("Invalid token at top level: {t:?}"),
+    }
+}
+
+fn parse_fn_body(token_stream: &mut Peekable<TokenStream>) -> Option<Instruction> {
+    let current = token_stream.next()?;
+    match current {
+        Token::Call => todo!(),
+        Token::Ret => match token_stream.peek()? {
+            Token::LineBreak => Some(Instruction::Ret(None)),
+            _ => Some(Instruction::Ret(Some(Box::new(parse_operand(
+                token_stream,
+            )?)))),
+        },
+        Token::RegID(id) => {
+            token_stream.next()?; // Equal
+            let rhs = parse_operand(token_stream)?;
+            Some(Instruction::DefReg {
+                id: *id,
+                rhs: Box::new(rhs),
+            })
+        }
+        Token::Label(name) => Some(Instruction::Label(Rc::clone(name))),
+        Token::RectParenOpen => {
+            let id = token_stream.next()?.as_reg_id()?;
+            token_stream.next()?; // RectParenClose
+            token_stream.next()?; // Equal
+            let rhs = parse_operand(token_stream)?;
+            Some(Instruction::Store {
+                id: *id,
+                rhs: Box::new(rhs),
+            })
+        }
+        t => panic!("Invalid token for function body: {t:?}"),
+    }
+}
+
+fn parse_operand(token_stream: &mut Peekable<TokenStream>) -> Option<Instruction> {
+    let current = token_stream.next()?;
+    match current {
+        Token::TypeName(t) => match token_stream.next()? {
+            Token::NumU(u) => Some(Instruction::UInt(*t, *u)),
+            Token::NumI(i) => Some(Instruction::Int(*t, *i)),
+            Token::NumF(f) => Some(Instruction::Float(*t, *f)),
+            Token::RegID(id) => Some(Instruction::Reg(*t, *id)),
+            Token::ArgID(id) => Some(Instruction::Arg(*t, *id)),
+            Token::RectParenOpen => {
+                let reg_id = token_stream.next()?.as_reg_id()?;
+                token_stream.next()?; // RectParenClose
+                Some(Instruction::Load {
+                    id: *reg_id,
+                    dtype: *t,
+                })
+            }
+            _ => panic!("Invalid token after {t:?}"),
+        },
+        Token::Alloc => Some(Instruction::Alloc(*token_stream.next()?.as_type_name()?)),
+        Token::Call => todo!(),
+        t => panic!("Invalid token for operand: {t:?}"),
+    }
 }

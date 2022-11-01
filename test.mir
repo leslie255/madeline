@@ -1,6 +1,9 @@
-fn @main {
-    "\b01000001"
-    %1 = alloc usize
-    ret i32 $0
+fn @main(i32 ptr) {
+    :start
+    %0 = alloc i32
+    [%0] = i32 $10
+    %1 = i32 [%0]
+    %2 = i32 %1
+    ret i32 %0
 }
 
