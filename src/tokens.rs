@@ -13,7 +13,6 @@ pub enum Token {
     Call,
     Alloc,
     Ret,
-    Result,
 
     Add,
     Sub,
@@ -79,7 +78,6 @@ pub fn parse_into_tokens(source: String) -> Vec<Token> {
                 "call" => tokens.push(Token::Call),
                 "alloc" => tokens.push(Token::Alloc),
                 "ret" => tokens.push(Token::Ret),
-                "result" => tokens.push(Token::Result),
                 "u64" => tokens.push(Token::TypeName(DataType::U64)),
                 "u32" => tokens.push(Token::TypeName(DataType::U32)),
                 "u16" => tokens.push(Token::TypeName(DataType::U16)),
@@ -159,6 +157,15 @@ macro_rules! oct_digit_to_num {
     }};
 }
 
+macro_rules! den_digit_to_num {
+    ($c: expr, $t: ty) => {{
+        match $c {
+            '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' => $c as $t - 0x30,
+            _ => panic!("Invalid digit in denary number: {:?}", $c),
+        }
+    }};
+}
+
 fn parse_number(str: String) -> Token {
     let mut chars_iter = str.chars();
     let first_ch = chars_iter.next().expect("Empty number literal");
@@ -171,7 +178,12 @@ fn parse_number(str: String) -> Token {
                     let mut weight = 1;
                     for c in str[2..].chars().rev() {
                         num += hex_digit_to_num!(c, u64) * weight;
-                        weight *= 16;
+                        let (mul_result, overflowed) = weight.overflowing_mul(16);
+                        weight = if overflowed {
+                            panic!("hexadecimal number exeeds 64 bit (16 hex digits)");
+                        } else {
+                            mul_result
+                        }
                     }
                     return Token::NumU(num);
                 }
@@ -181,20 +193,37 @@ fn parse_number(str: String) -> Token {
                     let mut weight = 1;
                     for c in str[2..].chars().rev() {
                         num += oct_digit_to_num!(c, u64) * weight;
-                        weight *= 8;
+                        let (add_result, overflowed) =
+                            num.overflowing_add(oct_digit_to_num!(c, u64) * weight);
+                        num = if overflowed {
+                            panic!("Octal number literal exeeds 64 bit");
+                        } else {
+                            add_result
+                        };
+                        let (mul_result, overflowed) = weight.overflowing_mul(8);
+                        weight = if overflowed {
+                            panic!("Octal number literal exeeds 64 bit");
+                        } else {
+                            mul_result
+                        }
                     }
                     return Token::NumU(num);
                 }
                 'b' => {
                     let mut num = 0;
-                    let mut weight = 1;
+                    let mut weight = 1u64;
                     for c in str[2..].chars().rev() {
                         match c {
                             '0' => (),
                             '1' => num += weight,
                             _ => panic!("Invalid digit in binary number: {c:?}"),
                         }
-                        weight *= 2;
+                        let (mul_result, overflowed) = weight.overflowing_mul(2);
+                        weight = if overflowed {
+                            panic!("Binary number literal exeeds 64 bit");
+                        } else {
+                            mul_result
+                        }
                     }
                     return Token::NumU(num);
                 }
@@ -233,8 +262,53 @@ fn parse_string(chars_iter: &mut Peekable<Chars>) -> Token {
                         num += hex_digit_to_num!(digits[1], u8);
                         bytes.push(num);
                     }
-                    'o' => todo!(),
-                    'b' => todo!(),
+                    'o' => {
+                        let digits: [char; 3] = [
+                            chars_iter.next().expect("Unexpected EOF in string escape sequence, expects three digits after \\o"),
+                            chars_iter.next().expect("Unexpected EOF in string escape sequence, expects three digits after \\o"),
+                            chars_iter.next().expect("Unexpected EOF in string escape sequence, expects three digits after \\o"),
+                        ];
+                        let mut num = 0;
+                        num += oct_digit_to_num!(digits[0], u8) * 64;
+                        num += oct_digit_to_num!(digits[1], u8) * 8;
+                        num += oct_digit_to_num!(digits[2], u8);
+                        bytes.push(num);
+                    }
+                    'd' => {
+                        let digits: [char; 3] = [
+                            chars_iter.next().expect("Unexpected EOF in string escape sequence, expects three digits after \\d"),
+                            chars_iter.next().expect("Unexpected EOF in string escape sequence, expects three digits after \\d"),
+                            chars_iter.next().expect("Unexpected EOF in string escape sequence, expects three digits after \\d"),
+                        ];
+                        let mut num = 0;
+                        num += den_digit_to_num!(digits[0], u8) * 100;
+                        num += den_digit_to_num!(digits[1], u8) * 10;
+                        num += den_digit_to_num!(digits[2], u8);
+                        bytes.push(num);
+                    }
+                    'b' => {
+                        let digits: [char; 8] = [
+                            chars_iter.next().expect("Unexpected EOF in string escape sequence, expects eight digits after \\d"),
+                            chars_iter.next().expect("Unexpected EOF in string escape sequence, expects eight digits after \\d"),
+                            chars_iter.next().expect("Unexpected EOF in string escape sequence, expects eight digits after \\d"),
+                            chars_iter.next().expect("Unexpected EOF in string escape sequence, expects eight digits after \\d"),
+                            chars_iter.next().expect("Unexpected EOF in string escape sequence, expects eight digits after \\d"),
+                            chars_iter.next().expect("Unexpected EOF in string escape sequence, expects eight digits after \\d"),
+                            chars_iter.next().expect("Unexpected EOF in string escape sequence, expects eight digits after \\d"),
+                            chars_iter.next().expect("Unexpected EOF in string escape sequence, expects eight digits after \\d"),
+                        ];
+                        let mut num = 0;
+                        let mut weight: u8 = 1;
+                        for c in digits.into_iter().rev() {
+                            match c {
+                                '0' => (),
+                                '1' => num += weight,
+                                c => panic!("Invalid digit in a binary number: {c:?}"),
+                            }
+                            weight = weight.wrapping_mul(2);
+                        }
+                        bytes.push(num);
+                    }
                     'n' => bytes.push(0x0A),
                     't' => bytes.push(0x09),
                     '\\' => bytes.push(0x5C),
@@ -250,7 +324,6 @@ fn parse_string(chars_iter: &mut Peekable<Chars>) -> Token {
                 .for_each(|b| bytes.push(*b)),
         }
     }
-    bytes.iter().for_each(|b|print!("{b:02X} "));
     println!();
     Token::String(bytes)
 }
