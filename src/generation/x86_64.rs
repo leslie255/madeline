@@ -17,6 +17,9 @@ pub enum Instruction {
     DeallocStack(u64),
 
     Mov(Operand, Operand),
+    Movzx(Operand, Operand),
+    Lea(Operand, Operand),
+
     Call(Rc<String>),
 }
 
@@ -26,21 +29,72 @@ pub enum Operand {
     Im([u8; 8]),
     Label(Rc<String>),
 }
-impl Operand {
-    fn is_im_zero(&self) -> bool {
-        if let Self::Im(bytes) = self {
-            bytes.iter().find(|b| **b == 0).is_some()
-        } else {
-            false
-        }
-    }
-}
 impl Display for Operand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Operand::Reg(reg) => write!(f, "{}", reg)?,
             Operand::Im(bytes) => write!(f, "{}", u64::from_be_bytes(bytes.clone()))?,
             Operand::Label(name) => write!(f, "{}:", name)?,
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum EvalTreeNode {
+    // [ ... ] in asm
+    Add(Box<Self>, Box<Self>),
+    Sub(Box<Self>, Box<Self>),
+    Mul(Box<Self>, Box<Self>),
+
+    Num(u64),
+    Reg(Register),
+}
+impl EvalTreeNode {
+    pub fn priority(&self) -> usize {
+        match self {
+            Self::Add(_, _) => 0,
+            Self::Sub(_, _) => 0,
+            Self::Mul(_, _) => 1,
+            Self::Num(_) => 2,
+            Self::Reg(_) => 2,
+        }
+    }
+    pub fn op_char(&self) -> char {
+        match self {
+            Self::Add(_, _) => '+',
+            Self::Sub(_, _) => '-',
+            Self::Mul(_, _) => '*',
+            Self::Num(_) => '\0',
+            Self::Reg(_) => '\0',
+        }
+    }
+}
+impl Display for EvalTreeNode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Add(lhs, rhs)
+            | Self::Sub(lhs, rhs)
+            | Self::Mul(lhs, rhs) => {
+                if lhs.priority() < self.priority() {
+                    write!(f, "({})", lhs)?;
+                } else {
+                    lhs.fmt(f)?;
+                }
+                self.op_char().fmt(f)?;
+                if rhs.priority() < self.priority() {
+                    write!(f, "({})", rhs)?;
+                } else {
+                    rhs.fmt(f)?;
+                }
+
+            }
+            Self::Num(num) => {
+                num.fmt(f)?;
+            }
+            Self::Reg(reg) => {
+                reg.fmt(f)?;
+            }
         }
         Ok(())
     }
@@ -208,8 +262,7 @@ impl Register {
         Self::from_raw(raw)
     }
     pub fn word_size(self) -> WordSize {
-        let raw = self as usize;
-        match raw & 0xF0 {
+        match (self as usize) & 0xF0 {
             0x00 => WordSize::Qword,
             0x10 => WordSize::Bword,
             0x20 => WordSize::Word,
@@ -251,6 +304,8 @@ pub fn gen_asm_from_model(
                 }
                 (oper0, oper1) => writeln!(target, "\tmov\t{}, {}", oper0, oper1)?,
             },
+            Instruction::Movzx(oper0, oper1) => writeln!(target, "\tmovzx\t{}, {}", oper0, oper1)?,
+            Instruction::Lea(oper0, oper1) => writeln!(target, "\tlea\t{}, {}", oper0, oper1)?,
             Instruction::Call(name) => writeln!(target, "call\t{}", file_format.mangle(&name))?,
         }
     }

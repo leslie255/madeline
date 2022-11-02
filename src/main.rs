@@ -22,6 +22,7 @@ fn main() {
 #[test]
 fn x64_codegen() {
     use generation::x86_64;
+    use generation::x86_64::EvalTreeNode;
     use generation::x86_64::Instruction as x64Instr;
     use generation::x86_64::Operand as x64Oper;
     use generation::x86_64::Register as x64Reg;
@@ -31,6 +32,20 @@ fn x64_codegen() {
             Rc::new($s.to_string())
         };
     }
+
+    let eval_tree = EvalTreeNode::Sub(
+        Box::new(EvalTreeNode::Reg(x64Reg::Rbp)),
+        Box::new(EvalTreeNode::Num(8)),
+    );
+    println!("[{eval_tree}]");
+    let eval_tree = EvalTreeNode::Mul(
+        Box::new(EvalTreeNode::Reg(x64Reg::Rax)),
+        Box::new(EvalTreeNode::Sub(
+            Box::new(EvalTreeNode::Reg(x64Reg::Rbp)),
+            Box::new(EvalTreeNode::Num(8)),
+        )),
+    );
+    println!("[{eval_tree}]");
 
     let program = vec![
         x64Instr::GlobalLabel(rcstr!("main")),
