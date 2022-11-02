@@ -6,6 +6,7 @@ use std::{
 };
 
 use crate::fileformat::FileFormat;
+use crate::ir::{DataType, Instruction as IRInstruction, TopLevel as IRTopLevel};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Instruction {
@@ -13,6 +14,7 @@ pub enum Instruction {
     Label(Rc<String>),
     FnProlog,
     FnEpilog,
+    Ret,
     AllocStack(u64),
     DeallocStack(u64),
 
@@ -28,15 +30,20 @@ pub enum Operand {
     Reg(Register),
     Im([u8; 8]),
     Label(Rc<String>),
+    Load(EvalTreeNode),              // [ ... ]
+    WordPtr(WordSize, EvalTreeNode), // qword [ ... ]
 }
-impl Display for Operand {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Operand {
+    pub fn gen_code(&self, file_format: FileFormat) -> Result<String, std::fmt::Error> {
+        let mut code = String::new();
         match self {
-            Operand::Reg(reg) => write!(f, "{}", reg)?,
-            Operand::Im(bytes) => write!(f, "{}", u64::from_be_bytes(bytes.clone()))?,
-            Operand::Label(name) => write!(f, "{}:", name)?,
+            Self::Reg(reg) => write!(code, "{}", reg)?,
+            Self::Im(bytes) => write!(code, "{}", u64::from_be_bytes(bytes.clone()))?,
+            Self::Label(name) => write!(code, "{}", file_format.mangle(name))?,
+            Self::Load(eval_tree) => write!(code, "[{}]", eval_tree)?,
+            Self::WordPtr(size, eval_tree) => write!(code, "{} [{}]", size, eval_tree)?,
         }
-        Ok(())
+        Ok(code)
     }
 }
 
@@ -73,9 +80,7 @@ impl EvalTreeNode {
 impl Display for EvalTreeNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Add(lhs, rhs)
-            | Self::Sub(lhs, rhs)
-            | Self::Mul(lhs, rhs) => {
+            Self::Add(lhs, rhs) | Self::Sub(lhs, rhs) | Self::Mul(lhs, rhs) => {
                 if lhs.priority() < self.priority() {
                     write!(f, "({})", lhs)?;
                 } else {
@@ -87,7 +92,6 @@ impl Display for EvalTreeNode {
                 } else {
                     rhs.fmt(f)?;
                 }
-
             }
             Self::Num(num) => {
                 num.fmt(f)?;
@@ -279,6 +283,16 @@ pub enum WordSize {
     Bword = 4,
     Qword = 8,
 }
+impl Display for WordSize {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            WordSize::Byte => write!(f, "byte"),
+            WordSize::Word => write!(f, "word"),
+            WordSize::Bword => write!(f, "bword"),
+            WordSize::Qword => write!(f, "qword"),
+        }
+    }
+}
 
 pub fn gen_asm_from_model(
     file_format: FileFormat,
@@ -296,18 +310,57 @@ pub fn gen_asm_from_model(
             Instruction::Label(name) => writeln!(target, "{}:", file_format.mangle(&name))?,
             Instruction::FnProlog => writeln!(target, "\tpush\trbp\n\tmov\trbp, rsp")?,
             Instruction::FnEpilog => writeln!(target, "\tpop\trbp\n\tret")?,
+            Instruction::Ret => writeln!(target, "\tret")?,
             Instruction::AllocStack(depth) => writeln!(target, "\tsub\trsp, {}", depth)?,
             Instruction::DeallocStack(depth) => writeln!(target, "\tadd\trsp, {}", depth)?,
             Instruction::Mov(oper0, oper1) => match (oper0, oper1) {
                 (Operand::Reg(reg), Operand::Im([0, 0, 0, 0, 0, 0, 0, 0])) => {
                     writeln!(target, "\txor\t{}, {}", reg, reg)?
                 }
-                (oper0, oper1) => writeln!(target, "\tmov\t{}, {}", oper0, oper1)?,
+                (oper0, oper1) => writeln!(
+                    target,
+                    "\tmov\t{}, {}",
+                    oper0.gen_code(file_format)?,
+                    oper1.gen_code(file_format)?,
+                )?,
             },
-            Instruction::Movzx(oper0, oper1) => writeln!(target, "\tmovzx\t{}, {}", oper0, oper1)?,
-            Instruction::Lea(oper0, oper1) => writeln!(target, "\tlea\t{}, {}", oper0, oper1)?,
+            Instruction::Movzx(oper0, oper1) => writeln!(
+                target,
+                "\tmovzx\t{}, {}",
+                oper0.gen_code(file_format)?,
+                oper1.gen_code(file_format)?
+            )?,
+            Instruction::Lea(oper0, oper1) => writeln!(
+                target,
+                "\tlea\t{}, {}",
+                oper0.gen_code(file_format)?,
+                oper1.gen_code(file_format)?
+            )?,
             Instruction::Call(name) => writeln!(target, "call\t{}", file_format.mangle(&name))?,
         }
     }
     Ok(())
+}
+
+pub fn gen_code(ir: Vec<IRTopLevel>) -> Vec<Instruction> {
+    let mut generated = Vec::<Instruction>::new();
+    for ir_top_level in ir {
+        match ir_top_level {
+            IRTopLevel::Extern(_) => todo!(),
+            IRTopLevel::Fn { name, args, body } => gen_inside_fn(name, args, body, &mut generated),
+        }
+    }
+    generated
+}
+
+fn gen_inside_fn(
+    name: Rc<String>,
+    args: Vec<DataType>,
+    body: Vec<IRInstruction>,
+    target: &mut Vec<Instruction>,
+) {
+    target.push(Instruction::GlobalLabel(name));
+    target.push(Instruction::FnProlog);
+    target.push(Instruction::FnEpilog);
+    target.push(Instruction::Ret);
 }
