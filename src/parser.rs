@@ -446,7 +446,29 @@ fn parse_top_level(token_stream: &mut Peekable<TokenStream>) -> Option<TopLevel>
 fn parse_fn_body(token_stream: &mut Peekable<TokenStream>) -> Option<Instruction> {
     let current = token_stream.next()?;
     match current {
-        Token::Call => todo!(),
+        Token::Call => {
+            let fn_name = Rc::clone(token_stream.next()?.as_fn_name()?);
+            let mut args = Vec::<Instruction>::new();
+            token_stream.next()?; // ParenOpen
+            loop {
+                match token_stream.next()? {
+                    Token::TypeName(t) => args.push(match *token_stream.next()? {
+                        Token::RegID(id) => Instruction::Reg(*t, id),
+                        Token::NumU(u) => Instruction::UInt(*t, u),
+                        Token::NumI(i) => Instruction::Int(*t, i),
+                        Token::NumF(f) => Instruction::Float(*t, f),
+                        _ => panic!("Expects register or number as function argument"),
+                    }),
+                    Token::ParenClose => break,
+                    _ => panic!("Expects `)` or type name"),
+                }
+            }
+            Some(Instruction::Call {
+                ret_type: None,
+                fn_name,
+                args,
+            })
+        }
         Token::Ret => match token_stream.peek()? {
             Token::LineBreak => Some(Instruction::Ret(None)),
             _ => Some(Instruction::Ret(Some(Box::new(parse_operand(
@@ -493,10 +515,32 @@ fn parse_operand(token_stream: &mut Peekable<TokenStream>) -> Option<Instruction
                     dtype: *t,
                 })
             }
+            Token::Call => {
+                let fn_name = Rc::clone(token_stream.next()?.as_fn_name()?);
+                let mut args = Vec::<Instruction>::new();
+                token_stream.next()?; // ParenOpen
+                loop {
+                    match token_stream.next()? {
+                        Token::TypeName(t) => args.push(match *token_stream.next()? {
+                            Token::RegID(id) => Instruction::Reg(*t, id),
+                            Token::NumU(u) => Instruction::UInt(*t, u),
+                            Token::NumI(i) => Instruction::Int(*t, i),
+                            Token::NumF(f) => Instruction::Float(*t, f),
+                            _ => panic!("Expects register or number as function argument"),
+                        }),
+                        Token::ParenClose => break,
+                        _ => panic!("Expects `)` or type name"),
+                    }
+                }
+                Some(Instruction::Call {
+                    ret_type: None,
+                    fn_name,
+                    args,
+                })
+            }
             _ => panic!("Invalid token after {t:?}"),
         },
         Token::Alloc => Some(Instruction::Alloc(*token_stream.next()?.as_type_name()?)),
-        Token::Call => todo!(),
         t => panic!("Invalid token for operand: {t:?}"),
     }
 }

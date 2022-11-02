@@ -1,9 +1,8 @@
 fn @main(i32 ptr) {
     :start
-    %0 = alloc i32
-    [%0] = i32 $10
-    %1 = i32 [%0]
-    %2 = i32 %1
+    call @test()
+    call @test(i32 %0)
+    %1 = i32 call @test()
     ret i32 %0
 }
 

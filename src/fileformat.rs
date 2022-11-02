@@ -5,9 +5,9 @@ pub enum FileFormat {
 }
 
 impl FileFormat {
-    pub fn label(&self, original: String) -> String {
+    pub fn mangle(&self, original: &String) -> String {
         match self {
-            Self::Elf64 => original,
+            Self::Elf64 => original.to_string(),
             Self::Macho64 => format!("_{}", original),
         }
     }

@@ -32,13 +32,28 @@ pub enum Instruction {
     Mul(Box<Self>, Box<Self>),
     Div(Box<Self>, Box<Self>),
 
-    Load { id: u64, dtype: DataType },
+    Load {
+        id: u64,
+        dtype: DataType,
+    },
 
     Alloc(DataType),
-    DefReg { id: u64, rhs: Box<Self> },
+    DefReg {
+        id: u64,
+        rhs: Box<Self>,
+    },
 
-    Store { id: u64, rhs: Box<Self> },
+    Store {
+        id: u64,
+        rhs: Box<Self>,
+    },
     Ret(Option<Box<Self>>),
+
+    Call {
+        ret_type: Option<DataType>,
+        fn_name: Rc<String>,
+        args: Vec<Self>,
+    },
 
     Label(Rc<String>),
 }
