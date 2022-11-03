@@ -19,7 +19,6 @@ pub enum DataType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Instruction {
-    Var(DataType, u64),
     Arg(DataType, u64),
     Reg(DataType, u64),
     UInt(DataType, u64),
@@ -56,6 +55,16 @@ pub enum Instruction {
     },
 
     Label(Rc<String>),
+}
+
+impl Instruction {
+    /// Returns `true` if the instruction is [`DefReg`].
+    ///
+    /// [`DefReg`]: Instruction::DefReg
+    #[must_use]
+    pub fn is_def_reg(&self) -> bool {
+        matches!(self, Self::DefReg { .. })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

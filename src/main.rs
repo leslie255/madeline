@@ -13,12 +13,13 @@ fn main() {
         .expect("Expect one argument for the source file path");
     let src_content = read_to_string(src_path).expect("Enable to read file into string");
     let tokens = parser::parse_string_into_tokens(src_content);
-    tokens.iter().for_each(|t| println!("{t:?}"));
-    println!("\n");
-    let program = parser::parse_tokens_into_ir(tokens);
-    program.iter().for_each(|i| println!("{i:#?}"));
-    let code_model = generation::x86_64::gen_code(program);
+    let ir_program = parser::parse_tokens_into_ir(tokens);
     let mut generated_asm = String::new();
-    generation::x86_64::gen_asm_from_model(fileformat::FileFormat::Macho64, code_model, &mut generated_asm).unwrap();
+    generation::x86_64::gen_asm_from_model(
+        fileformat::FileFormat::Macho64,
+        generation::x86_64::gen_code(ir_program),
+        &mut generated_asm,
+    )
+    .unwrap();
     print!("{generated_asm}");
 }

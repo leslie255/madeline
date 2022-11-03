@@ -1,12 +1,15 @@
-#![allow(dead_code)]
+#![allow(unused)]
 
 use std::{
     fmt::{Display, Write},
     rc::Rc,
 };
 
-use crate::fileformat::FileFormat;
-use crate::ir::{DataType, Instruction as IRInstruction, TopLevel as IRTopLevel};
+use super::virt_reg::{RegKind, VirtRegMap};
+use crate::{
+    fileformat::FileFormat,
+    ir::{DataType, Instruction as IRInstruction, TopLevel as IRTopLevel},
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Instruction {
@@ -359,8 +362,58 @@ fn gen_inside_fn(
     body: Vec<IRInstruction>,
     target: &mut Vec<Instruction>,
 ) {
+    let reg_map = generate_reg_map(&body);
+    reg_map.print_reg_lifetime_map();
+    reg_map.print_reg_infos();
     target.push(Instruction::GlobalLabel(name));
     target.push(Instruction::FnProlog);
     target.push(Instruction::FnEpilog);
     target.push(Instruction::Ret);
+}
+
+fn generate_reg_map(body: &Vec<IRInstruction>) -> VirtRegMap {
+    let reg_count = body.iter().filter(|i| i.is_def_reg()).count();
+    let step_count = body.len();
+    let mut map = VirtRegMap::new(reg_count, step_count);
+    macro_rules! update_reg_lifetime_if_needed {
+        ($i: expr, $step: expr) => {
+            match $i {
+                IRInstruction::Reg(_, id) | IRInstruction::Load { id, dtype: _ } => {
+                    map.mark_alive_until(*id, $step);
+                }
+                _ => (),
+            }
+        };
+    }
+    body.iter()
+        .enumerate()
+        .for_each(|(step, instr)| match instr {
+            IRInstruction::DefReg { id, rhs } => {
+                map.mark_alive(*id, step);
+                map.reg_infos[*id as usize].kind = match rhs.as_ref() {
+                    IRInstruction::Alloc(_) => RegKind::StackSpace,
+                    _ => RegKind::Normal,
+                };
+            }
+            IRInstruction::Store { id, rhs } => {
+                map.mark_alive_until(*id, step);
+                update_reg_lifetime_if_needed!(rhs.as_ref(), step);
+            }
+            IRInstruction::Ret(Some(ret_val)) => {
+                update_reg_lifetime_if_needed!(ret_val.as_ref(), step);
+            }
+            IRInstruction::Ret(None) => (),
+            IRInstruction::Call {
+                ret_type,
+                fn_name,
+                args,
+            } => {
+                for arg in args {
+                    update_reg_lifetime_if_needed!(arg, step);
+                }
+            }
+            IRInstruction::Label(_) => (),
+            instr => panic!("{:?} in root level is invalid", instr),
+        });
+    map
 }
