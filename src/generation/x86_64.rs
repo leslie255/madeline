@@ -5,7 +5,7 @@ use std::{
     rc::Rc,
 };
 
-use super::virt_reg::{Register, VirtRegKind, VirtRegMap};
+use super::virt_reg::{Register, VRegAllocator, VRegContentKind};
 use crate::{
     fileformat::FileFormat,
     ir::{DataType, Instruction as IRInstruction, TopLevel as IRTopLevel},
@@ -41,7 +41,7 @@ pub enum Operand {
     Reg(X64Register),
     Im([u8; 8]),
     Label(Rc<String>),
-    Load(EvalTreeNode),              // [ ... ]
+    Load(EvalTreeNode),                 // [ ... ]
     WordPtr(X86WordSize, EvalTreeNode), // qword [ ... ]
 }
 impl Operand {
@@ -117,7 +117,7 @@ impl Display for EvalTreeNode {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum X64Register {
     Rax = 0x00,
     Rbx,
@@ -293,25 +293,25 @@ impl X64Register {
 impl Register for X64Register {
     fn caller_saved() -> Vec<Self> {
         vec![
-            X64Register::Rdi,
-            X64Register::Rsi,
-            X64Register::Rdx,
-            X64Register::Rcx,
-            X64Register::R8,
-            X64Register::R9,
+            Self::Rdi,
+            Self::Rsi,
+            Self::Rdx,
+            Self::Rcx,
+            Self::R8,
+            Self::R9,
         ]
     }
     fn callee_saved() -> Vec<Self> {
         vec![
-            X64Register::Rbx,
-            X64Register::Rsp,
-            X64Register::Rbp,
-            X64Register::R10,
-            X64Register::R11,
-            X64Register::R12,
-            X64Register::R13,
-            X64Register::R14,
-            X64Register::R15,
+            Self::Rbx,
+            Self::Rsp,
+            Self::Rbp,
+            Self::R10,
+            Self::R11,
+            Self::R12,
+            Self::R13,
+            Self::R14,
+            Self::R15,
         ]
     }
 }
@@ -397,8 +397,11 @@ fn gen_inside_fn(
     body: Vec<IRInstruction>,
     target: &mut Vec<Instruction>,
 ) {
-    let mut reg_map = VirtRegMap::<X64Register>::generate_from_body(&body);
-    reg_map.alloc_real_registers();
+    let vreg_count = body.iter().filter(|&i| i.is_def_reg()).count();
+    let step_count = body.len();
+    let mut reg_map = VRegAllocator::<X64Register>::empty(step_count, vreg_count);
+    reg_map.generate_map_from(&body);
+    //reg_map.alloc_real_registers();
 
     reg_map.print_reg_lifetime_map();
     reg_map.print_reg_infos();
