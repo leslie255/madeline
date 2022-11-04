@@ -65,6 +65,14 @@ impl Instruction {
     pub fn is_def_reg(&self) -> bool {
         matches!(self, Self::DefReg { .. })
     }
+    #[must_use]
+    pub fn as_def_reg_id(&self) -> Option<u64> {
+        if let Self::DefReg { id, .. } = self {
+            Some(*id)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

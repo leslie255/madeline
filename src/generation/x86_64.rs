@@ -5,11 +5,19 @@ use std::{
     rc::Rc,
 };
 
-use super::virt_reg::{RegKind, VirtRegMap};
+use super::virt_reg::{Register, VirtRegKind, VirtRegMap};
 use crate::{
     fileformat::FileFormat,
     ir::{DataType, Instruction as IRInstruction, TopLevel as IRTopLevel},
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum X86WordSize {
+    Byte = 1,
+    Word = 2,
+    Bword = 4,
+    Qword = 8,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Instruction {
@@ -30,11 +38,11 @@ pub enum Instruction {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operand {
-    Reg(Register),
+    Reg(X64Register),
     Im([u8; 8]),
     Label(Rc<String>),
     Load(EvalTreeNode),              // [ ... ]
-    WordPtr(WordSize, EvalTreeNode), // qword [ ... ]
+    WordPtr(X86WordSize, EvalTreeNode), // qword [ ... ]
 }
 impl Operand {
     pub fn gen_code(&self, file_format: FileFormat) -> Result<String, std::fmt::Error> {
@@ -44,7 +52,9 @@ impl Operand {
             Self::Im(bytes) => write!(code, "{}", u64::from_be_bytes(bytes.clone()))?,
             Self::Label(name) => write!(code, "{}", file_format.mangle(name))?,
             Self::Load(eval_tree) => write!(code, "[{}]", eval_tree)?,
-            Self::WordPtr(size, eval_tree) => write!(code, "{} [{}]", size, eval_tree)?,
+            Self::WordPtr(size, eval_tree) => {
+                write!(code, "{} [{}]", size.fmt_into_asm(), eval_tree)?
+            }
         }
         Ok(code)
     }
@@ -58,7 +68,7 @@ pub enum EvalTreeNode {
     Mul(Box<Self>, Box<Self>),
 
     Num(u64),
-    Reg(Register),
+    Reg(X64Register),
 }
 impl EvalTreeNode {
     pub fn priority(&self) -> usize {
@@ -107,16 +117,16 @@ impl Display for EvalTreeNode {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Register {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum X64Register {
     Rax = 0x00,
     Rbx,
     Rcx,
     Rdx,
-    Rsi,
-    Rdi,
     Rsp,
     Rbp,
+    Rsi,
+    Rdi,
     R8,
     R9,
     R10,
@@ -130,10 +140,10 @@ pub enum Register {
     Ebx,
     Ecx,
     Edx,
-    Esi,
-    Edi,
     Esp,
     Ebp,
+    Esi,
+    Edi,
     R8d,
     R9d,
     R10d,
@@ -147,10 +157,10 @@ pub enum Register {
     Bx,
     Cx,
     Dx,
-    Si,
-    Di,
     Sp,
     Bp,
+    Si,
+    Di,
     R8w,
     R9w,
     R10w,
@@ -164,10 +174,10 @@ pub enum Register {
     Bl,
     Cl,
     Dl,
-    Sil,
-    Dil,
     Spl,
     Bpl,
+    Sil,
+    Dil,
     R8b,
     R9b,
     R10b,
@@ -178,122 +188,147 @@ pub enum Register {
     R15b,
 }
 
-impl Display for Register {
+impl Display for X64Register {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Register::Rax => write!(f, "rax")?,
-            Register::Rbx => write!(f, "rbx")?,
-            Register::Rcx => write!(f, "rcx")?,
-            Register::Rdx => write!(f, "rdx")?,
-            Register::Rsi => write!(f, "rsi")?,
-            Register::Rdi => write!(f, "rdi")?,
-            Register::Rsp => write!(f, "rsp")?,
-            Register::Rbp => write!(f, "rbp")?,
-            Register::R8 => write!(f, "r8")?,
-            Register::R9 => write!(f, "r9")?,
-            Register::R10 => write!(f, "r10")?,
-            Register::R11 => write!(f, "r11")?,
-            Register::R12 => write!(f, "r12")?,
-            Register::R13 => write!(f, "r13")?,
-            Register::R14 => write!(f, "r14")?,
-            Register::R15 => write!(f, "r15")?,
-            Register::Eax => write!(f, "eax")?,
-            Register::Ebx => write!(f, "ebx")?,
-            Register::Ecx => write!(f, "ecx")?,
-            Register::Edx => write!(f, "edx")?,
-            Register::Esi => write!(f, "esi")?,
-            Register::Edi => write!(f, "edi")?,
-            Register::Esp => write!(f, "esp")?,
-            Register::Ebp => write!(f, "ebp")?,
-            Register::R8d => write!(f, "r8d")?,
-            Register::R9d => write!(f, "r9d")?,
-            Register::R10d => write!(f, "r10d")?,
-            Register::R11d => write!(f, "r11d")?,
-            Register::R12d => write!(f, "r12d")?,
-            Register::R13d => write!(f, "r13d")?,
-            Register::R14d => write!(f, "r14d")?,
-            Register::R15d => write!(f, "r15d")?,
-            Register::Ax => write!(f, "ax")?,
-            Register::Bx => write!(f, "bx")?,
-            Register::Cx => write!(f, "cx")?,
-            Register::Dx => write!(f, "dx")?,
-            Register::Si => write!(f, "si")?,
-            Register::Di => write!(f, "di")?,
-            Register::Sp => write!(f, "sp")?,
-            Register::Bp => write!(f, "bp")?,
-            Register::R8w => write!(f, "r8w")?,
-            Register::R9w => write!(f, "r9w")?,
-            Register::R10w => write!(f, "r10w")?,
-            Register::R11w => write!(f, "r11w")?,
-            Register::R12w => write!(f, "r12w")?,
-            Register::R13w => write!(f, "r13w")?,
-            Register::R14w => write!(f, "r14w")?,
-            Register::R15w => write!(f, "r15w")?,
-            Register::Al => write!(f, "al")?,
-            Register::Bl => write!(f, "bl")?,
-            Register::Cl => write!(f, "cl")?,
-            Register::Dl => write!(f, "dl")?,
-            Register::Sil => write!(f, "sil")?,
-            Register::Dil => write!(f, "dil")?,
-            Register::Spl => write!(f, "spl")?,
-            Register::Bpl => write!(f, "bpl")?,
-            Register::R8b => write!(f, "r8b")?,
-            Register::R9b => write!(f, "r9b")?,
-            Register::R10b => write!(f, "r10b")?,
-            Register::R11b => write!(f, "r11b")?,
-            Register::R12b => write!(f, "r12b")?,
-            Register::R13b => write!(f, "r13b")?,
-            Register::R14b => write!(f, "r14b")?,
-            Register::R15b => write!(f, "r15b")?,
+            X64Register::Rax => write!(f, "rax")?,
+            X64Register::Rbx => write!(f, "rbx")?,
+            X64Register::Rcx => write!(f, "rcx")?,
+            X64Register::Rdx => write!(f, "rdx")?,
+            X64Register::Rsp => write!(f, "rsp")?,
+            X64Register::Rbp => write!(f, "rbp")?,
+            X64Register::Rsi => write!(f, "rsi")?,
+            X64Register::Rdi => write!(f, "rdi")?,
+            X64Register::R8 => write!(f, "r8")?,
+            X64Register::R9 => write!(f, "r9")?,
+            X64Register::R10 => write!(f, "r10")?,
+            X64Register::R11 => write!(f, "r11")?,
+            X64Register::R12 => write!(f, "r12")?,
+            X64Register::R13 => write!(f, "r13")?,
+            X64Register::R14 => write!(f, "r14")?,
+            X64Register::R15 => write!(f, "r15")?,
+            X64Register::Eax => write!(f, "eax")?,
+            X64Register::Ebx => write!(f, "ebx")?,
+            X64Register::Ecx => write!(f, "ecx")?,
+            X64Register::Edx => write!(f, "edx")?,
+            X64Register::Esp => write!(f, "esp")?,
+            X64Register::Ebp => write!(f, "ebp")?,
+            X64Register::Esi => write!(f, "esi")?,
+            X64Register::Edi => write!(f, "edi")?,
+            X64Register::R8d => write!(f, "r8d")?,
+            X64Register::R9d => write!(f, "r9d")?,
+            X64Register::R10d => write!(f, "r10d")?,
+            X64Register::R11d => write!(f, "r11d")?,
+            X64Register::R12d => write!(f, "r12d")?,
+            X64Register::R13d => write!(f, "r13d")?,
+            X64Register::R14d => write!(f, "r14d")?,
+            X64Register::R15d => write!(f, "r15d")?,
+            X64Register::Ax => write!(f, "ax")?,
+            X64Register::Bx => write!(f, "bx")?,
+            X64Register::Cx => write!(f, "cx")?,
+            X64Register::Dx => write!(f, "dx")?,
+            X64Register::Sp => write!(f, "sp")?,
+            X64Register::Bp => write!(f, "bp")?,
+            X64Register::Si => write!(f, "si")?,
+            X64Register::Di => write!(f, "di")?,
+            X64Register::R8w => write!(f, "r8w")?,
+            X64Register::R9w => write!(f, "r9w")?,
+            X64Register::R10w => write!(f, "r10w")?,
+            X64Register::R11w => write!(f, "r11w")?,
+            X64Register::R12w => write!(f, "r12w")?,
+            X64Register::R13w => write!(f, "r13w")?,
+            X64Register::R14w => write!(f, "r14w")?,
+            X64Register::R15w => write!(f, "r15w")?,
+            X64Register::Al => write!(f, "al")?,
+            X64Register::Bl => write!(f, "bl")?,
+            X64Register::Cl => write!(f, "cl")?,
+            X64Register::Dl => write!(f, "dl")?,
+            X64Register::Spl => write!(f, "spl")?,
+            X64Register::Bpl => write!(f, "bpl")?,
+            X64Register::Sil => write!(f, "sil")?,
+            X64Register::Dil => write!(f, "dil")?,
+            X64Register::R8b => write!(f, "r8b")?,
+            X64Register::R9b => write!(f, "r9b")?,
+            X64Register::R10b => write!(f, "r10b")?,
+            X64Register::R11b => write!(f, "r11b")?,
+            X64Register::R12b => write!(f, "r12b")?,
+            X64Register::R13b => write!(f, "r13b")?,
+            X64Register::R14b => write!(f, "r14b")?,
+            X64Register::R15b => write!(f, "r15b")?,
         }
         Ok(())
     }
 }
 
-impl Register {
+impl X64Register {
     pub fn from_raw(raw: usize) -> Self {
         unsafe {
             let ptr = &raw as *const usize;
             return *(ptr as *const Self);
         }
     }
-    pub fn of_size(self, size: WordSize) -> Self {
+}
+impl X64Register {
+    fn of_size(self, size: X86WordSize) -> Self {
         let mut raw = self as usize;
         raw &= 0x0F;
         match size {
-            WordSize::Byte => raw += 0x30,
-            WordSize::Word => raw += 0x20,
-            WordSize::Bword => raw += 0x10,
-            WordSize::Qword => (),
+            X86WordSize::Byte => raw += 0x30,
+            X86WordSize::Word => raw += 0x20,
+            X86WordSize::Bword => raw += 0x10,
+            X86WordSize::Qword => (),
         }
         Self::from_raw(raw)
     }
-    pub fn word_size(self) -> WordSize {
+    fn word_size(self) -> X86WordSize {
         match (self as usize) & 0xF0 {
-            0x00 => WordSize::Qword,
-            0x10 => WordSize::Bword,
-            0x20 => WordSize::Word,
-            0x30 => WordSize::Byte,
+            0x00 => X86WordSize::Qword,
+            0x10 => X86WordSize::Bword,
+            0x20 => X86WordSize::Word,
+            0x30 => X86WordSize::Byte,
             _ => panic!(),
         }
     }
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum WordSize {
-    Byte = 1,
-    Word = 2,
-    Bword = 4,
-    Qword = 8,
+impl Register for X64Register {
+    fn caller_saved() -> Vec<Self> {
+        vec![
+            X64Register::Rdi,
+            X64Register::Rsi,
+            X64Register::Rdx,
+            X64Register::Rcx,
+            X64Register::R8,
+            X64Register::R9,
+        ]
+    }
+    fn callee_saved() -> Vec<Self> {
+        vec![
+            X64Register::Rbx,
+            X64Register::Rsp,
+            X64Register::Rbp,
+            X64Register::R10,
+            X64Register::R11,
+            X64Register::R12,
+            X64Register::R13,
+            X64Register::R14,
+            X64Register::R15,
+        ]
+    }
 }
-impl Display for WordSize {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+trait FmtIntoX64Asm {
+    fn fmt_into_asm(&self) -> String;
+}
+impl FmtIntoX64Asm for X86WordSize {
+    fn fmt_into_asm(&self) -> String {
+        let mut str = String::with_capacity(5);
         match self {
-            WordSize::Byte => write!(f, "byte"),
-            WordSize::Word => write!(f, "word"),
-            WordSize::Bword => write!(f, "bword"),
-            WordSize::Qword => write!(f, "qword"),
+            X86WordSize::Byte => write!(str, "byte"),
+            X86WordSize::Word => write!(str, "word"),
+            X86WordSize::Bword => write!(str, "bword"),
+            X86WordSize::Qword => write!(str, "qword"),
         }
+        .unwrap();
+        str
     }
 }
 
@@ -362,58 +397,14 @@ fn gen_inside_fn(
     body: Vec<IRInstruction>,
     target: &mut Vec<Instruction>,
 ) {
-    let reg_map = generate_reg_map(&body);
+    let mut reg_map = VirtRegMap::<X64Register>::generate_from_body(&body);
+    reg_map.alloc_real_registers();
+
     reg_map.print_reg_lifetime_map();
     reg_map.print_reg_infos();
+
     target.push(Instruction::GlobalLabel(name));
     target.push(Instruction::FnProlog);
     target.push(Instruction::FnEpilog);
     target.push(Instruction::Ret);
-}
-
-fn generate_reg_map(body: &Vec<IRInstruction>) -> VirtRegMap {
-    let reg_count = body.iter().filter(|i| i.is_def_reg()).count();
-    let step_count = body.len();
-    let mut map = VirtRegMap::new(reg_count, step_count);
-    macro_rules! update_reg_lifetime_if_needed {
-        ($i: expr, $step: expr) => {
-            match $i {
-                IRInstruction::Reg(_, id) | IRInstruction::Load { id, dtype: _ } => {
-                    map.mark_alive_until(*id, $step);
-                }
-                _ => (),
-            }
-        };
-    }
-    body.iter()
-        .enumerate()
-        .for_each(|(step, instr)| match instr {
-            IRInstruction::DefReg { id, rhs } => {
-                map.mark_alive(*id, step);
-                map.reg_infos[*id as usize].kind = match rhs.as_ref() {
-                    IRInstruction::Alloc(_) => RegKind::StackSpace,
-                    _ => RegKind::Normal,
-                };
-            }
-            IRInstruction::Store { id, rhs } => {
-                map.mark_alive_until(*id, step);
-                update_reg_lifetime_if_needed!(rhs.as_ref(), step);
-            }
-            IRInstruction::Ret(Some(ret_val)) => {
-                update_reg_lifetime_if_needed!(ret_val.as_ref(), step);
-            }
-            IRInstruction::Ret(None) => (),
-            IRInstruction::Call {
-                ret_type,
-                fn_name,
-                args,
-            } => {
-                for arg in args {
-                    update_reg_lifetime_if_needed!(arg, step);
-                }
-            }
-            IRInstruction::Label(_) => (),
-            instr => panic!("{:?} in root level is invalid", instr),
-        });
-    map
 }

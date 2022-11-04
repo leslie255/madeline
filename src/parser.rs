@@ -454,6 +454,11 @@ fn parse_fn_body(token_stream: &mut Peekable<TokenStream>) -> Option<Instruction
                 match token_stream.next()? {
                     Token::TypeName(t) => args.push(match *token_stream.next()? {
                         Token::RegID(id) => Instruction::Reg(*t, id),
+                        Token::RectParenOpen => {
+                            let reg = token_stream.next()?.as_reg_id()?;
+                            token_stream.next()?;   // RectParenClose
+                            Instruction::Reg(*t, *reg)
+                        }
                         Token::NumU(u) => Instruction::UInt(*t, u),
                         Token::NumI(i) => Instruction::Int(*t, i),
                         Token::NumF(f) => Instruction::Float(*t, f),
