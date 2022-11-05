@@ -401,7 +401,7 @@ fn gen_inside_fn(
     let step_count = body.len();
     let mut reg_map = VRegAllocator::<X64Register>::empty(step_count, vreg_count);
     reg_map.generate_map_from(&body);
-    //reg_map.alloc_real_registers();
+    reg_map.alloc_regs();
 
     reg_map.print_reg_lifetime_map();
     reg_map.print_reg_infos();

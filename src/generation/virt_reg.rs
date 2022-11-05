@@ -18,56 +18,44 @@ pub enum VRegContentKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VRegInfo<R>
-where
-    R: Register,
-{
-    /// The internal ID of a VReg is not the same as the actual name of the register is not the
-    /// same as the numeric name used in IR, the interal ID is a consecutive number from 0 in the
-    /// order of the their first appearance in the block
-    pub internal_id: usize,
+pub struct VRegInfo {
+    pub external_id: u64,
     /// The type of content inside the VReg, could be either a pointer to a stack space, or a value
     pub kind: VRegContentKind,
     /// The first and last appearance of the VReg
     pub lifetime: Range<usize>,
     /// Where the real location of the register is, can be either inside a real register in the CPU
     /// or on the stack
-    pub allocation: Option<VRegAlloc<R>>,
+    pub allocation: Option<VRegAlloc>,
 }
-impl<R> Default for VRegInfo<R>
-where
-    R: Register,
-{
+impl Default for VRegInfo {
     fn default() -> Self {
         Self {
-            internal_id: 0,
+            external_id: 0,
             kind: VRegContentKind::Normal,
             lifetime: Default::default(),
             allocation: None,
         }
     }
 }
-impl<R> VRegInfo<R>
-where
-    R: Register,
-{
-    fn new(internal_id: usize, kind: VRegContentKind) -> Self {
-        Self {
-            internal_id,
-            kind,
-            lifetime: 0..0,
-            allocation: None,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VRegAlloc<R>
-where
-    R: Register,
-{
-    RealReg(R),
+pub enum VRegAlloc {
+    /// Use a real register in place for the virtual register
+    RealReg(usize),
     // StackSpace,
+    /// For every occurance of the register, replace it with a stack pointer offset
+    Aliased,
+}
+
+impl VRegAlloc {
+    pub fn as_real_reg(&self) -> Option<usize> {
+        if let Self::RealReg(v) = self {
+            Some(*v)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,11 +91,11 @@ struct RegStatus {
     // stack_occupation: ...
 }
 impl RegStatus {
-    fn empty(reg_count: usize, vreg_count: usize) -> Self {
+    fn empty(vreg_count: usize) -> Self {
         Self {
             life_stages: (0..vreg_count).map(|_| VRegLifeStage::Dead).collect(),
             has_fn_call: false,
-            reg_occupation: (0..reg_count).map(|_| false).collect(),
+            reg_occupation: Vec::new(),
         }
     }
 }
@@ -118,12 +106,16 @@ where
     R: Register,
 {
     /// Interal ID's for real registers
+    /// Index is internal ID, item is external ID
     reg_ids: Vec<R>,
+    /// Internal ID's for virtual registers
+    vreg_ids: HashMap<u64, usize>,
+    /// Information of all of the virtual registers used
+    /// Ordered by internal ID's
+    vreg_infos: Vec<VRegInfo>,
     /// A big map of the status of the status of every VReg and real registers in every step of one
     /// block
     step_map: Vec<RegStatus>,
-    /// Information of all of the virtual registers used
-    vreg_infos: HashMap<u64, VRegInfo<R>>,
 }
 impl<R> VRegAllocator<R>
 where
@@ -132,20 +124,32 @@ where
     /// Create a new empty VRegAllocator with the given size
     pub fn empty(step_count: usize, vreg_count: usize) -> Self {
         let regs = R::caller_saved();
-        let reg_count = regs.len();
         Self {
             reg_ids: regs,
+            vreg_ids: HashMap::with_capacity(vreg_count),
+            vreg_infos: Vec::with_capacity(vreg_count),
             step_map: (0..step_count)
-                .map(|_| RegStatus::empty(reg_count, vreg_count))
+                .map(|_| RegStatus::empty(vreg_count))
                 .collect(),
-            vreg_infos: HashMap::<u64, VRegInfo<R>>::new(),
         }
+    }
+    /// Add a new virtual register
+    fn add_vreg(&mut self, name: u64, kind: VRegContentKind) {
+        let internal_id = self.vreg_infos.len();
+        self.vreg_ids.insert(name, internal_id);
+        self.vreg_infos.push(VRegInfo {
+            external_id: name,
+            kind,
+            lifetime: 0..0,
+            allocation: None,
+        })
     }
     /// Mark a virtual register alive at `step`
     /// `id` is external ID
+    /// Will panic if the ID does not exist
     fn mark_alive(&mut self, id: u64, step: usize) {
-        let vreg_info = self.vreg_infos.get_mut(&id).unwrap();
-        let internal_id = vreg_info.internal_id;
+        let internal_id = *self.vreg_ids.get(&id).unwrap();
+        let vreg_info = self.vreg_infos.get_mut(internal_id).unwrap();
         vreg_info.lifetime = step..step;
         self.step_map[step].life_stages[internal_id] = VRegLifeStage::Born;
     }
@@ -153,8 +157,8 @@ where
     /// Start of the lifetime does not change
     /// If `step` < `start` the function would mark the register alive to the end of the body
     fn mark_alive_until(&mut self, id: u64, end: usize) {
-        let vreg_info = self.vreg_infos.get_mut(&id).unwrap();
-        let interal_id = vreg_info.internal_id;
+        let internal_id = *self.vreg_ids.get(&id).unwrap();
+        let vreg_info = self.vreg_infos.get_mut(internal_id).unwrap();
         let start_index = if vreg_info.lifetime.start == vreg_info.lifetime.end {
             vreg_info.lifetime.end + 1
         } else {
@@ -162,9 +166,23 @@ where
         };
         self.step_map[start_index..end]
             .iter_mut()
-            .for_each(|status| status.life_stages[interal_id] = VRegLifeStage::Live);
-        self.step_map[end].life_stages[interal_id] = VRegLifeStage::Dying;
+            .for_each(|status| status.life_stages[internal_id] = VRegLifeStage::Live);
+        self.step_map[end].life_stages[internal_id] = VRegLifeStage::Dying;
         vreg_info.lifetime.end = end;
+    }
+    /// Try to allocate a real register for the VReg, returns the internal ID for the register
+    fn try_alloc_real_reg(reg_occupations: &mut Vec<bool>) -> Option<usize> {
+        reg_occupations
+            .iter_mut()
+            .enumerate()
+            .find_map(|(i, occupied)| {
+                if *occupied {
+                    None
+                } else {
+                    *occupied = true;
+                    Some(i)
+                }
+            })
     }
     /// Generate a register allocator for a block
     pub fn generate_map_from(&mut self, body: &Vec<Instruction>) {
@@ -182,16 +200,12 @@ where
             .enumerate()
             .for_each(|(step, instr)| match instr {
                 Instruction::DefReg { id, rhs } => {
-                    let internal_id = self.vreg_infos.len();
-                    self.vreg_infos.insert(
+                    self.add_vreg(
                         *id,
-                        VRegInfo::new(
-                            internal_id,
-                            match rhs.as_ref() {
-                                Instruction::Alloc(_) => VRegContentKind::StackSpace,
-                                _ => VRegContentKind::Normal,
-                            },
-                        ),
+                        match rhs.as_ref() {
+                            Instruction::Alloc(_) => VRegContentKind::StackSpace,
+                            _ => VRegContentKind::Normal,
+                        },
                     );
                     self.mark_alive(*id, step);
                     update_reg_lifetime_if_needed!(rhs.as_ref(), step);
@@ -226,8 +240,41 @@ where
             });
     }
     /// Allocate real registers or stack space for the all virtual registers
-    pub fn alloc_real_registers(&mut self) {
-        todo!()
+    pub fn alloc_regs(&mut self) {
+        let mut reg_occupation: Vec<bool> = self.reg_ids.iter().map(|_|false).collect();
+        for row in &mut self.step_map {
+            let life_stages = &row.life_stages;
+            for (internal_id, life_stage) in life_stages.iter().enumerate() {
+                match life_stage {
+                    VRegLifeStage::Born => {
+                        if let Some(reg_id) = Self::try_alloc_real_reg(&mut reg_occupation) {
+                            self.vreg_infos[internal_id].allocation =
+                                Some(VRegAlloc::RealReg(reg_id));
+                        } else {
+                            todo!("Allocate stack space for virtual register");
+                        }
+                    }
+                    VRegLifeStage::Live => (),
+                    VRegLifeStage::Dying => {
+                        if let Some(VRegAlloc::RealReg(reg)) =
+                            self.vreg_infos[internal_id].allocation
+                        {
+                            reg_occupation[reg] = false;
+                        }
+                    }
+                    VRegLifeStage::Dead => (),
+                }
+            }
+            row.reg_occupation = reg_occupation.to_vec();
+        }
+    }
+    /// If the VReg is allocated onto a real register, return the register
+    pub fn get_alloced_reg(&self, id: u64) -> Option<R> {
+        let internal_vreg_id = self.vreg_ids[&id];
+        let internal_reg_id = self.vreg_infos[internal_vreg_id]
+            .allocation?
+            .as_real_reg()?;
+        Some(self.reg_ids[internal_reg_id])
     }
 }
 
@@ -238,18 +285,13 @@ where
 {
     pub fn print_reg_lifetime_map(&self) {
         if cfg!(debug_assertions) {
-            println!("VReg life stages:");
-            let mut interal_external_id_pairs = self
-                .vreg_infos
+            println!("VReg step map:");
+            self.vreg_infos
                 .iter()
-                .map(|(&external_id, info)| (info.internal_id, external_id))
-                .collect::<Vec<(usize, u64)>>();
-            interal_external_id_pairs.sort_by(|x, y| x.0.cmp(&y.0));
-            interal_external_id_pairs
-                .iter()
-                .for_each(|(external, _)| print!("\t%{}", external));
+                .for_each(|vreg| print!("\t%{}", vreg.external_id));
+            print!("\tcall?");
             self.reg_ids.iter().for_each(|reg| print!("\t{}", reg));
-            println!("\tcall?");
+            println!();
             self.step_map.iter().enumerate().for_each(|(row_num, row)| {
                 print!("{}\t", row_num);
                 row.life_stages
@@ -260,10 +302,15 @@ where
                         VRegLifeStage::Dying => print!("X\t"),
                         VRegLifeStage::Dead => print!("\t"),
                     });
+                if row.has_fn_call {
+                    print!("√");
+                } else {
+                    print!("");
+                }
                 row.reg_occupation
                     .iter()
-                    .for_each(|occupied| print!("{}\t", if *occupied { '√' } else { ' ' }));
-                println!("{}\t", if row.has_fn_call { '√' } else { ' ' });
+                    .for_each(|occupied| print!("\t{}", if *occupied { '√' } else { ' ' }));
+                println!();
             });
         }
     }
@@ -271,10 +318,10 @@ where
         if cfg!(debug_assertions) {
             println!("Virtual registers:");
             println!("id:\tkind\tlife\talloc");
-            self.vreg_infos.iter().for_each(|(id, info)| {
+            self.vreg_infos.iter().for_each(|info| {
                 print!(
                     "{}:\t{}\t{:?}",
-                    id,
+                    info.external_id,
                     match info.kind {
                         VRegContentKind::StackSpace => "stack",
                         VRegContentKind::Normal => "normal",
@@ -284,9 +331,10 @@ where
                 if let Some(reg_alloc) = info.allocation {
                     match reg_alloc {
                         VRegAlloc::RealReg(reg) => println!("\t{}", reg),
+                        VRegAlloc::Aliased => println!("\taliased"),
                     }
                 } else {
-                    println!()
+                    println!("\tNo alloc")
                 }
             })
         }
