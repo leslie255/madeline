@@ -1,7 +1,9 @@
 fn @main(i32 ptr) {
-    %0 = i32 $0
     call @func()
-    %1 = i32 %0
-    ret i32 %1
+    %0 = i32 $42
+    %1 = ptr %0
+    %2 = ptr %0
+    %3 = alloc i64
+    ret i32 [%1]
 }
 

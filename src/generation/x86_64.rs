@@ -5,7 +5,10 @@ use std::{
     rc::Rc,
 };
 
-use super::virt_reg::{Register, VRegAllocator, VRegContentKind};
+use super::{
+    stack_alloc::StackAllocator,
+    vreg_alloc::{Register, VRegAllocator, VRegContentKind},
+};
 use crate::{
     fileformat::FileFormat,
     ir::{DataType, Instruction as IRInstruction, TopLevel as IRTopLevel},
@@ -397,14 +400,18 @@ fn gen_inside_fn(
     body: Vec<IRInstruction>,
     target: &mut Vec<Instruction>,
 ) {
-    let vreg_count = body.iter().filter(|&i| i.is_def_reg()).count();
-    let step_count = body.len();
-    let mut reg_map = VRegAllocator::<X64Register>::empty(step_count, vreg_count);
-    reg_map.generate_map_from(&body);
-    reg_map.alloc_regs();
+    let mut vreg_allocator = VRegAllocator::<X64Register>::generate_from(&body);
+    vreg_allocator.alloc_regs();
 
-    reg_map.print_reg_lifetime_map();
-    reg_map.print_reg_infos();
+    vreg_allocator.print_reg_lifetime_map();
+    vreg_allocator.print_reg_infos();
+
+    let mut stack_allocator = StackAllocator::new(16, 8);
+    let stack_alloc = stack_allocator.allocate();
+    println!("Stack allocation:");
+    stack_alloc.locations.iter().enumerate().for_each(|(i, l)| {
+        println!("{i}:\t{l}");
+    });
 
     target.push(Instruction::GlobalLabel(name));
     target.push(Instruction::FnProlog);
