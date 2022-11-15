@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 #[derive(Debug, Clone)]
 pub struct StackAllocator {
     /// Size of each of the variables, ordered by ID
@@ -59,12 +57,13 @@ impl StackAllocator {
         }
     }
     /// Add a variable onto the stack, returns the ID of the variable
-    pub fn push_var(&mut self, size: u8) -> usize {
+    pub fn add_var(&mut self, size: u8) -> usize {
         self.vars.push(size);
         self.vars.len() - 1
     }
+    #[allow(dead_code)]
     /// Add an array onto the stack, returns the ID of the array
-    pub fn push_arr(&mut self, size: u8, count: usize) -> usize {
+    pub fn add_arr(&mut self, size: u8, count: usize) -> usize {
         self.arrs.push((size, count));
         self.vars.len() - 1
     }
@@ -72,29 +71,18 @@ impl StackAllocator {
 
 #[derive(Debug, Clone)]
 pub struct StackAllocation {
-    stack_depth: usize,
+    pub stack_depth: usize,
     pub locations: Vec<usize>,
 }
 impl StackAllocation {
-    /// Returns the total depths of the stack
-    /// If there is nothing on the stack, will return the initial offset
-    pub fn stack_depth(&self) -> usize {
-        self.stack_depth
-    }
-    /// Returns `true` if the stack has no variables or arrays
-    /// Must be called after `alloc`
-    pub fn is_empty(&self) -> bool {
-        self.locations.is_empty()
-    }
     /// Return the location of a variable on the stack, relative to the stack base pointer,
     /// aligned according to `stack_depth`
-    /// Must be called after `alloc`
     pub fn var_location(&self, id: usize) -> usize {
         self.locations[id]
     }
+    #[allow(dead_code)]
     /// Return the location of an element of an array on the stack, relative to the stack base pointer,
     /// aligned according to `stack_depth`
-    /// Must be called after `alloc`
     pub fn arr_location(&self, id: usize, size: usize, i: usize) -> usize {
         self.locations[id] + i * size
     }

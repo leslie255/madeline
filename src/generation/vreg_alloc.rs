@@ -2,6 +2,8 @@ use std::{collections::HashMap, ops::Range};
 
 use crate::ir::Instruction;
 
+use super::stack_alloc::StackAllocator;
+
 pub trait Register
 where
     Self: Sized + Copy + Eq + std::fmt::Debug,
@@ -13,7 +15,8 @@ where
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// The type of content inside the VReg, could be either a pointer to a stack space, or a value
 pub enum VRegContentKind {
-    StackSpace,
+    /// `u8` is the dtype size
+    StackSpace(u8),
     Normal,
 }
 
@@ -43,9 +46,9 @@ impl Default for VRegInfo {
 pub enum VRegAlloc {
     /// Use a real register in place for the virtual register
     RealReg(usize),
-    // StackSpace,
-    /// For every occurance of this register, replace it with a pointer to the stack
-    StackPtr,
+    /// VReg is a point to a stack space
+    /// `usize` is the Stackspace ID
+    StackPtr(usize),
 }
 
 impl VRegAlloc {
@@ -61,10 +64,10 @@ impl VRegAlloc {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// State of a virtual register's life at one since step
 enum VRegLifeStage {
-    Born = 0b100,
+    Born = 0x10,
     Live,
     Dying,
-    Dead = 0b000,
+    Dead = 000,
 }
 impl Default for VRegLifeStage {
     fn default() -> Self {
@@ -101,7 +104,7 @@ impl RegStatus {
 }
 
 #[derive(Debug, Clone)]
-pub struct VRegAllocator<R>
+pub struct VRegAllocation<R>
 where
     R: Register,
 {
@@ -117,7 +120,7 @@ where
     /// block
     step_map: Vec<RegStatus>,
 }
-impl<R> VRegAllocator<R>
+impl<R> VRegAllocation<R>
 where
     R: Register,
 {
@@ -144,7 +147,7 @@ where
             allocation: None,
         })
     }
-    /// Mark a virtual register alive at `step`
+    /// Mark a virtual register alive at `step` as `SingleDay`
     /// `id` is external ID
     /// Will panic if the ID does not exist
     fn mark_alive(&mut self, id: u64, step: usize) {
@@ -185,7 +188,7 @@ where
             })
     }
     /// Generate a register allocator for a block
-    pub fn generate_from(body: &Vec<Instruction>) -> Self {
+    pub fn generate_from(body: &Vec<Instruction>, stack_allocator: &mut StackAllocator) -> Self {
         let vreg_count = body.iter().filter(|&i| i.is_def_reg()).count();
         let step_count = body.len();
         let mut allocator = Self::empty(step_count, vreg_count);
@@ -206,7 +209,10 @@ where
                     allocator.add_vreg(
                         *id,
                         match rhs.as_ref() {
-                            Instruction::Alloc(_) => VRegContentKind::StackSpace,
+                            Instruction::Alloc(dtype) => {
+                                // TODO: dynamic word size
+                                VRegContentKind::StackSpace(dtype.size(8))
+                            }
                             Instruction::Reg(_, id) => {
                                 allocator.vreg_infos[allocator.vreg_ids[id]].content_kind
                             }
@@ -244,19 +250,22 @@ where
                 Instruction::Label(_) => (),
                 instr => panic!("{:?} in root level is invalid", instr),
             });
+        allocator.alloc_regs(stack_allocator);
         allocator
     }
     /// Allocate real registers or stack space for the all virtual registers
-    pub fn alloc_regs(&mut self) {
+    fn alloc_regs(&mut self, stack_allocator: &mut StackAllocator) {
         let mut reg_occupation: Vec<bool> = self.reg_ids.iter().map(|_| false).collect();
         for row in &mut self.step_map {
             let life_stages = &row.life_stages;
             for (internal_id, life_stage) in life_stages.iter().enumerate() {
                 match life_stage {
-                    VRegLifeStage::Born => {
-                        if self.vreg_infos[internal_id].content_kind == VRegContentKind::StackSpace
+                    VRegLifeStage::Born if self.vreg_infos[internal_id].lifetime.len() > 1 => {
+                        if let VRegContentKind::StackSpace(dtype_size) =
+                            self.vreg_infos[internal_id].content_kind
                         {
-                            self.vreg_infos[internal_id].allocation = Some(VRegAlloc::StackPtr);
+                            let stackspace_id = stack_allocator.add_var(dtype_size);
+                            self.vreg_infos[internal_id].allocation = Some(VRegAlloc::StackPtr(stackspace_id));
                         } else if let Some(reg_id) = Self::try_alloc_real_reg(&mut reg_occupation) {
                             self.vreg_infos[internal_id].allocation =
                                 Some(VRegAlloc::RealReg(reg_id));
@@ -273,12 +282,14 @@ where
                         }
                     }
                     VRegLifeStage::Dead => (),
+                    _ => (),
                 }
             }
             row.reg_occupation = reg_occupation.to_vec();
         }
     }
-    /// If the VReg is allocated onto a real register, return the register
+    #[allow(dead_code)]
+    /// Return a register if the VReg is allocated onto a real register
     pub fn get_alloced_reg(&self, id: u64) -> Option<R> {
         let internal_vreg_id = self.vreg_ids[&id];
         let internal_reg_id = self.vreg_infos[internal_vreg_id]
@@ -289,7 +300,7 @@ where
 }
 
 #[allow(dead_code)]
-impl<R> VRegAllocator<R>
+impl<R> VRegAllocation<R>
 where
     R: Register + std::fmt::Display,
 {
@@ -333,7 +344,7 @@ where
                     "{}:\t{}\t{:?}",
                     info.external_id,
                     match info.content_kind {
-                        VRegContentKind::StackSpace => "stack",
+                        VRegContentKind::StackSpace(_) => "stack",
                         VRegContentKind::Normal => "normal",
                     },
                     info.lifetime,
@@ -341,7 +352,7 @@ where
                 if let Some(reg_alloc) = info.allocation {
                     match reg_alloc {
                         VRegAlloc::RealReg(reg_id) => println!("\t{}", self.reg_ids[reg_id]),
-                        VRegAlloc::StackPtr => println!("\taliased"),
+                        VRegAlloc::StackPtr(loc) => println!("\tstack {}", loc),
                     }
                 } else {
                     println!("\tNo alloc")

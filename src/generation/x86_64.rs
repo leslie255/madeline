@@ -7,7 +7,7 @@ use std::{
 
 use super::{
     stack_alloc::StackAllocator,
-    vreg_alloc::{Register, VRegAllocator, VRegContentKind},
+    vreg_alloc::{Register, VRegAllocation, VRegContentKind},
 };
 use crate::{
     fileformat::FileFormat,
@@ -400,18 +400,18 @@ fn gen_inside_fn(
     body: Vec<IRInstruction>,
     target: &mut Vec<Instruction>,
 ) {
-    let mut vreg_allocator = VRegAllocator::<X64Register>::generate_from(&body);
-    vreg_allocator.alloc_regs();
-
-    vreg_allocator.print_reg_lifetime_map();
-    vreg_allocator.print_reg_infos();
-
     let mut stack_allocator = StackAllocator::new(16, 8);
+    let vreg_alloc = VRegAllocation::<X64Register>::generate_from(&body, &mut stack_allocator);
+
+    vreg_alloc.print_reg_lifetime_map();
+    vreg_alloc.print_reg_infos();
+
     let stack_alloc = stack_allocator.allocate();
     println!("Stack allocation:");
     stack_alloc.locations.iter().enumerate().for_each(|(i, l)| {
         println!("{i}:\t{l}");
     });
+    println!("Stack depth: {}", stack_alloc.stack_depth);
 
     target.push(Instruction::GlobalLabel(name));
     target.push(Instruction::FnProlog);

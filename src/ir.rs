@@ -16,6 +16,19 @@ pub enum DataType {
     F32,
     Ptr,
 }
+impl DataType {
+    /// Size of the data type in bytes (8, 4, 2, 1)
+    /// If it's Ptr, USize or ISize, return `word_size`
+    pub fn size(self, word_size: u8) -> u8 {
+        match self {
+            DataType::U64 | DataType::I64 | DataType::F64 => 8,
+            DataType::U32 | DataType::I32 | DataType::F32 => 4,
+            DataType::U16 | DataType::I16 => 2,
+            DataType::U8 | DataType::I8 => 1,
+            DataType::USize | DataType::ISize | DataType::Ptr => word_size,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Instruction {
