@@ -1,8 +1,6 @@
 use std::{collections::HashMap, ops::Range};
 
-use crate::ir::Instruction;
-
-use super::stack_alloc::StackAllocator;
+use crate::{generation::stack_alloc::StackAllocator, ir::Instruction};
 
 pub trait Register
 where
@@ -233,7 +231,7 @@ where
                             Instruction::Reg(_, id) => {
                                 match allocator.vreg_infos[allocator.vreg_ids[id]].content_kind {
                                     VRegContentKind::StackSpace(_) => VRegContentKind::Normal,
-                                    kind => kind
+                                    kind => kind,
                                 }
                             }
                             Instruction::UInt(_, u) => VRegContentKind::Const(u.to_be_bytes()),

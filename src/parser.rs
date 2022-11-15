@@ -1,10 +1,8 @@
 #![allow(dead_code)]
 
-use std::{iter::Peekable, vec::IntoIter};
-use std::rc::Rc;
-use std::str::Chars;
+use std::{iter::Peekable, rc::Rc, str::Chars, vec::IntoIter};
 
-use super::ir::{DataType, Instruction, TopLevel};
+use crate::ir::{DataType, Instruction, TopLevel};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {

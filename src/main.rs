@@ -5,6 +5,8 @@ pub mod generation;
 pub mod ir;
 mod parser;
 
+use generation::platform;
+
 fn main() {
     let mut args = env::args();
     args.next();
@@ -15,9 +17,9 @@ fn main() {
     let tokens = parser::parse_string_into_tokens(src_content);
     let ir_program = parser::parse_tokens_into_ir(tokens);
     println!("{ir_program:#?}");
-    let code = generation::x86_64::gen_code(ir_program);
+    let code = platform::x86_64::gen_code(ir_program);
     let mut generated_asm = String::new();
-    generation::x86_64::gen_asm_from_model(
+    platform::x86_64::gen_asm_from_model(
         fileformat::FileFormat::Macho64,
         code,
         &mut generated_asm,
