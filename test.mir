@@ -3,8 +3,8 @@ fn @test(i32) {
 }
 
 fn @main(i32 ptr) {
-    call @func(i32 $12)
     %1 = i32 $42
+    call @func(i32 $12)
     ret i32 %1
 }
 

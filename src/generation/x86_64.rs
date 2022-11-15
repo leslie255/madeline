@@ -57,7 +57,7 @@ pub enum Instruction {
 impl Instruction {
     /// Shorthand for `pop rbp`
     pub fn pop_rop() -> Self {
-        Instruction::Pop(Operand::Reg(X64Register::Rbp))
+        Instruction::Pop(X64Register::Rbp.into())
     }
 }
 
@@ -92,6 +92,11 @@ impl Operand {
                 Box::new(EvalTreeNode::Num(loc as u64)),
             ),
         )
+    }
+}
+impl From<X64Register> for Operand {
+    fn from(reg: X64Register) -> Self {
+        Self::Reg(reg)
     }
 }
 
@@ -351,10 +356,7 @@ impl Register for X64Register {
         ]
     }
 }
-trait FmtIntoX64Asm {
-    fn fmt_into_asm(&self) -> String;
-}
-impl FmtIntoX64Asm for X86WordSize {
+impl X86WordSize {
     fn fmt_into_asm(&self) -> String {
         let mut str = String::with_capacity(5);
         match self {
@@ -461,7 +463,7 @@ fn gen_inside_fn(
             IRInstruction::DefReg { id, rhs } => {
                 let (rhs_dtype, rhs_operand) = gen_operand(*rhs, &stack_alloc, &vreg_allocations);
                 let lhs_operand = if let Some(real_reg) = vreg_allocations.get_alloced_reg(id) {
-                    Operand::Reg(real_reg.of_size(rhs_dtype.into()))
+                    real_reg.of_size(rhs_dtype.into()).into()
                 } else if let Some(stackspace_id) = vreg_allocations.get_alloced_stackptr(id) {
                     Operand::rbp_sub(rhs_dtype.into(), stack_alloc.var_location(stackspace_id))
                 } else {
@@ -487,7 +489,7 @@ fn gen_inside_fn(
                         gen_operand(*ret_val, &stack_alloc, &vreg_allocations);
                     let operand_type = operand_type;
                     target.push(Instruction::Mov(
-                        Operand::Reg(X64Register::Rax.of_size(operand_type.into())),
+                        X64Register::Rax.of_size(operand_type.into()).into(),
                         operand,
                     ));
                 }
@@ -506,17 +508,16 @@ fn gen_inside_fn(
                 // TODO: push currently occupied registers
                 // Load arguments in reverse order because for some reason gcc and clang do that
                 vreg_allocations
-                    .for_each_living_reg(step, |r| target.push(Instruction::Push(Operand::Reg(r))));
+                    .for_each_living_reg(step, |r| target.push(Instruction::Push(r.into())));
                 for (i, arg_instruction) in args.into_iter().rev().enumerate() {
                     let (arg_dtype, arg_operand) =
                         gen_operand(arg_instruction, &stack_alloc, &vreg_allocations);
-                    let arg_reg_sized = arg_regs[i].of_size(arg_dtype.into());
-                    target.push(Instruction::Mov(Operand::Reg(arg_reg_sized), arg_operand))
+                    let arg_reg = arg_regs[i].of_size(arg_dtype.into());
+                    target.push(Instruction::Mov(arg_reg.into(), arg_operand))
                 }
                 target.push(Instruction::Call(fn_name));
-                vreg_allocations.for_each_living_reg_rev(step, |r| {
-                    target.push(Instruction::Pop(Operand::Reg(r)))
-                });
+                vreg_allocations
+                    .for_each_living_reg_rev(step, |r| target.push(Instruction::Pop(r.into())));
             }
             IRInstruction::Label(name) => target.push(Instruction::Label(name)),
             illegal => panic!("{:?} is illegal as root node", illegal),
@@ -535,17 +536,15 @@ fn gen_operand(
         IRInstruction::Arg(_, _) => todo!(),
         IRInstruction::Reg(dtype, reg) => (
             dtype,
-            Operand::Reg(
-                vreg_alloc
-                    .get_alloced_reg(reg)
-                    .expect("No real register allocated for VReg")
-                    .of_size(dtype.into()),
-            ),
+            vreg_alloc
+                .get_alloced_reg(reg)
+                .expect("No real register allocated for VReg")
+                .of_size(dtype.into())
+                .into(),
         ),
         IRInstruction::UInt(dtype, val) => (dtype, Operand::Im(val.to_be_bytes())),
-        IRInstruction::Int(_, _) => todo!(),
-        IRInstruction::Float(_, _) => todo!(),
-        IRInstruction::String(_) => todo!(),
+        IRInstruction::Int(dtype, val) => (dtype, Operand::Im(val.to_be_bytes())),
+        IRInstruction::Float(dtype, val) => (dtype, Operand::Im(val.to_be_bytes())),
         IRInstruction::Load { id, dtype } => (
             dtype,
             Operand::rbp_sub(
