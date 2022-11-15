@@ -481,9 +481,10 @@ fn gen_inside_fn(
                 } else if let Some(_) = vreg_allocations.get_alloced_const(id) {
                     // No need to generate anything here since for every occurance of this register
                     // we can just replace it with the const value
-                } else {
-                    todo!("Allocate VReg on stack")
                 }
+                // TODO: Allocate VReg on stack
+                // Sometimes a VReg doesn't not have any allocation, it's because VReg allocator
+                // decides to cull it
             }
             IRInstruction::Store { id: vreg_id, rhs } => {
                 let stackspace_id = vreg_allocations
