@@ -67,7 +67,7 @@ pub enum Instruction {
         args: Vec<Self>,
     },
 
-    Label(Rc<String>),
+    Label(String),
 }
 
 impl Instruction {

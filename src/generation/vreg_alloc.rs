@@ -59,6 +59,14 @@ impl VRegAlloc {
             None
         }
     }
+
+    pub fn as_stack_ptr(&self) -> Option<usize> {
+        if let Self::StackPtr(v) = self {
+            Some(*v)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -260,12 +268,13 @@ where
             let life_stages = &row.life_stages;
             for (internal_id, life_stage) in life_stages.iter().enumerate() {
                 match life_stage {
-                    VRegLifeStage::Born if self.vreg_infos[internal_id].lifetime.len() > 1 => {
+                    VRegLifeStage::Born if self.vreg_infos[internal_id].lifetime.len() != 0 => {
                         if let VRegContentKind::StackSpace(dtype_size) =
                             self.vreg_infos[internal_id].content_kind
                         {
                             let stackspace_id = stack_allocator.add_var(dtype_size);
-                            self.vreg_infos[internal_id].allocation = Some(VRegAlloc::StackPtr(stackspace_id));
+                            self.vreg_infos[internal_id].allocation =
+                                Some(VRegAlloc::StackPtr(stackspace_id));
                         } else if let Some(reg_id) = Self::try_alloc_real_reg(&mut reg_occupation) {
                             self.vreg_infos[internal_id].allocation =
                                 Some(VRegAlloc::RealReg(reg_id));
@@ -296,6 +305,13 @@ where
             .allocation?
             .as_real_reg()?;
         Some(self.reg_ids[internal_reg_id])
+    }
+    pub fn get_alloced_stackptr(&self, id: u64) -> Option<usize> {
+        let internal_vreg_id = self.vreg_ids[&id];
+        let stack_id = self.vreg_infos[internal_vreg_id]
+            .allocation?
+            .as_stack_ptr()?;
+        Some(stack_id)
     }
 }
 

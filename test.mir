@@ -1,5 +1,4 @@
 fn @main(i32 ptr) {
-    call @func()
     %1 = alloc i32
     [%1] = i32 $42
     ret i32 [%1]

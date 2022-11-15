@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::iter::Peekable;
+use std::{iter::Peekable, vec::IntoIter};
 use std::rc::Rc;
 use std::str::Chars;
 
@@ -40,7 +40,7 @@ pub enum Token {
 
     String(Vec<u8>),
 
-    Label(Rc<String>),
+    Label(String),
     FnName(Rc<String>),
     RegID(u64),
     ArgID(u64),
@@ -168,10 +168,9 @@ pub fn parse_string_into_tokens(source: String) -> Vec<Token> {
             '#' => tokens.push(Token::ArgID(
                 (collect_ch!(|c| c.is_numeric())).parse().unwrap(),
             )),
-            ':' => tokens.push(Token::Label(Rc::new(collect_ch!(|c| c
-                .is_ascii_alphanumeric()
+            ':' => tokens.push(Token::Label(collect_ch!(|c| c.is_ascii_alphanumeric()
                 || *c == '_'
-                || *c == '.')))),
+                || *c == '.'))),
             '@' => tokens.push(Token::FnName(Rc::new(collect_ch!(|c| c
                 .is_ascii_alphanumeric()
                 || *c == '_'
@@ -374,33 +373,9 @@ fn parse_string(chars_iter: &mut Peekable<Chars>) -> Token {
     Token::String(bytes)
 }
 
-struct TokenStream<'a> {
-    tokens: &'a Vec<Token>,
-    i: usize,
-}
-
-impl<'a> TokenStream<'a> {
-    fn new(tokens: &'a Vec<Token>) -> Self {
-        TokenStream { tokens, i: 0 }
-    }
-    fn is_end(&self) -> bool {
-        self.i >= self.tokens.len() - 1
-    }
-}
-
-impl<'a> Iterator for TokenStream<'a> {
-    type Item = &'a Token;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let t = self.tokens.get(self.i);
-        self.i += 1;
-        t
-    }
-}
-
 pub fn parse_tokens_into_ir(tokens: Vec<Token>) -> Vec<TopLevel> {
     let mut ir = Vec::<TopLevel>::new();
-    let mut token_stream = TokenStream::new(&tokens).peekable();
+    let mut token_stream = tokens.into_iter().peekable();
     loop {
         token_stream.next_if(|t| t.is_line_break());
         if let Some(i) = parse_top_level(&mut token_stream) {
@@ -412,7 +387,7 @@ pub fn parse_tokens_into_ir(tokens: Vec<Token>) -> Vec<TopLevel> {
     return ir;
 }
 
-fn parse_top_level(token_stream: &mut Peekable<TokenStream>) -> Option<TopLevel> {
+fn parse_top_level(token_stream: &mut Peekable<IntoIter<Token>>) -> Option<TopLevel> {
     let current = token_stream.next()?;
     match current {
         Token::Fn => {
@@ -422,7 +397,7 @@ fn parse_top_level(token_stream: &mut Peekable<TokenStream>) -> Option<TopLevel>
             token_stream.next()?; // ParenOpen
             loop {
                 match token_stream.next()? {
-                    Token::TypeName(t) => args.push(*t),
+                    Token::TypeName(t) => args.push(t),
                     Token::ParenClose => break,
                     _ => panic!("Expects `)` or type name after `@{name}`"),
                 }
@@ -443,7 +418,7 @@ fn parse_top_level(token_stream: &mut Peekable<TokenStream>) -> Option<TopLevel>
     }
 }
 
-fn parse_fn_body(token_stream: &mut Peekable<TokenStream>) -> Option<Instruction> {
+fn parse_fn_body(token_stream: &mut Peekable<IntoIter<Token>>) -> Option<Instruction> {
     let current = token_stream.next()?;
     match current {
         Token::Call => {
@@ -452,16 +427,16 @@ fn parse_fn_body(token_stream: &mut Peekable<TokenStream>) -> Option<Instruction
             token_stream.next()?; // ParenOpen
             loop {
                 match token_stream.next()? {
-                    Token::TypeName(t) => args.push(match *token_stream.next()? {
-                        Token::RegID(id) => Instruction::Reg(*t, id),
+                    Token::TypeName(t) => args.push(match token_stream.next()? {
+                        Token::RegID(id) => Instruction::Reg(t, id),
                         Token::RectParenOpen => {
-                            let reg = token_stream.next()?.as_reg_id()?;
-                            token_stream.next()?;   // RectParenClose
-                            Instruction::Reg(*t, *reg)
+                            let reg = *token_stream.next()?.as_reg_id()?;
+                            token_stream.next()?; // RectParenClose
+                            Instruction::Reg(t, reg)
                         }
-                        Token::NumU(u) => Instruction::UInt(*t, u),
-                        Token::NumI(i) => Instruction::Int(*t, i),
-                        Token::NumF(f) => Instruction::Float(*t, f),
+                        Token::NumU(u) => Instruction::UInt(t, u),
+                        Token::NumI(i) => Instruction::Int(t, i),
+                        Token::NumF(f) => Instruction::Float(t, f),
                         _ => panic!("Expects register or number as function argument"),
                     }),
                     Token::ParenClose => break,
@@ -484,18 +459,18 @@ fn parse_fn_body(token_stream: &mut Peekable<TokenStream>) -> Option<Instruction
             token_stream.next()?; // Equal
             let rhs = parse_operand(token_stream)?;
             Some(Instruction::DefReg {
-                id: *id,
+                id,
                 rhs: Box::new(rhs),
             })
         }
-        Token::Label(name) => Some(Instruction::Label(Rc::clone(name))),
+        Token::Label(name) => Some(Instruction::Label(name)),
         Token::RectParenOpen => {
-            let id = token_stream.next()?.as_reg_id()?;
+            let id = *token_stream.next()?.as_reg_id()?;
             token_stream.next()?; // RectParenClose
             token_stream.next()?; // Equal
             let rhs = parse_operand(token_stream)?;
             Some(Instruction::Store {
-                id: *id,
+                id,
                 rhs: Box::new(rhs),
             })
         }
@@ -503,21 +478,21 @@ fn parse_fn_body(token_stream: &mut Peekable<TokenStream>) -> Option<Instruction
     }
 }
 
-fn parse_operand(token_stream: &mut Peekable<TokenStream>) -> Option<Instruction> {
+fn parse_operand(token_stream: &mut Peekable<IntoIter<Token>>) -> Option<Instruction> {
     let current = token_stream.next()?;
     match current {
         Token::TypeName(t) => match token_stream.next()? {
-            Token::NumU(u) => Some(Instruction::UInt(*t, *u)),
-            Token::NumI(i) => Some(Instruction::Int(*t, *i)),
-            Token::NumF(f) => Some(Instruction::Float(*t, *f)),
-            Token::RegID(id) => Some(Instruction::Reg(*t, *id)),
-            Token::ArgID(id) => Some(Instruction::Arg(*t, *id)),
+            Token::NumU(u) => Some(Instruction::UInt(t, u)),
+            Token::NumI(i) => Some(Instruction::Int(t, i)),
+            Token::NumF(f) => Some(Instruction::Float(t, f)),
+            Token::RegID(id) => Some(Instruction::Reg(t, id)),
+            Token::ArgID(id) => Some(Instruction::Arg(t, id)),
             Token::RectParenOpen => {
-                let reg_id = token_stream.next()?.as_reg_id()?;
+                let reg_id = *token_stream.next()?.as_reg_id()?;
                 token_stream.next()?; // RectParenClose
                 Some(Instruction::Load {
-                    id: *reg_id,
-                    dtype: *t,
+                    id: reg_id,
+                    dtype: t,
                 })
             }
             Token::Call => {
@@ -526,11 +501,11 @@ fn parse_operand(token_stream: &mut Peekable<TokenStream>) -> Option<Instruction
                 token_stream.next()?; // ParenOpen
                 loop {
                     match token_stream.next()? {
-                        Token::TypeName(t) => args.push(match *token_stream.next()? {
-                            Token::RegID(id) => Instruction::Reg(*t, id),
-                            Token::NumU(u) => Instruction::UInt(*t, u),
-                            Token::NumI(i) => Instruction::Int(*t, i),
-                            Token::NumF(f) => Instruction::Float(*t, f),
+                        Token::TypeName(t) => args.push(match token_stream.next()? {
+                            Token::RegID(id) => Instruction::Reg(t, id),
+                            Token::NumU(u) => Instruction::UInt(t, u),
+                            Token::NumI(i) => Instruction::Int(t, i),
+                            Token::NumF(f) => Instruction::Float(t, f),
                             _ => panic!("Expects register or number as function argument"),
                         }),
                         Token::ParenClose => break,

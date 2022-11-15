@@ -3,8 +3,9 @@ _main:
         push    rbp
         mov     rbp, rsp
         sub     rsp, 16
-        mov     qword [rbp-8], 42
-        xor     rax, rax
+        mov     dword [rbp-8], 42
+        mov     eax, dword [rbp-8]
         add     rsp, 16
         pop     rbp
+        ret
         ret

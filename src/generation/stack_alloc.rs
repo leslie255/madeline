@@ -48,8 +48,15 @@ impl StackAllocator {
                 }
             }
             bin_leftover = self.alignment;
-            stack_depth /= self.alignment;
-            stack_depth *= self.alignment;
+            // round up stack_depth by self.alignment
+            stack_depth = {
+                let remainder = stack_depth % self.alignment;
+                if remainder == 0 {
+                    stack_depth
+                } else {
+                    stack_depth - remainder + self.alignment
+                }
+            };
         }
         StackAllocation {
             stack_depth,
