@@ -346,15 +346,15 @@ fn gen_inside_fn(
                 // Sometimes a VReg doesn't not have any allocation, it's because VReg allocator
                 // decides to cull it
             }
-            IRInstruction::Store { id: vreg_id, rhs } => {
+            IRInstruction::Store { lhs_dtype, id: vreg_id, rhs } => {
                 let stackspace_id = vreg_allocations
                     .get_alloced_stackptr(vreg_id)
                     .expect("Storing into a register who is not a stack pointer");
                 let stack_location = stack_alloc.var_location(stackspace_id);
                 let (rhs_dtype, rhs_oper) = gen_operand(*rhs, &stack_alloc, &vreg_allocations);
-                let size: X86WordSize = rhs_dtype.into();
+                let rhs_size: X86WordSize = rhs_dtype.into();
                 let lhs_oper = Operand::rbp_sub(rhs_dtype.into(), stack_location);
-                gen_move_instruction(size, lhs_oper, size, rhs_oper, target);
+                gen_move_instruction(lhs_dtype.into(), lhs_oper, rhs_size, rhs_oper, target);
             }
             IRInstruction::Ret(ret_val) => {
                 if let Some(ret_val) = ret_val {

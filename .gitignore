@@ -1,5 +1,6 @@
 a.out
 generated.asm
+output.asm
 generated.o
 
 # Created by https://www.toptal.com/developers/gitignore/api/rust,macos,windows,linux,vim,emacs,visualstudiocode

@@ -8,9 +8,11 @@ mod parser;
 use generation::platform;
 
 fn main() {
-    let mut args = env::args();
-    args.next();
+    let mut args = env::args().skip(1);
     let src_path = args
+        .next()
+        .expect("Expect one argument for the source file path");
+    let out_path = args
         .next()
         .expect("Expect one argument for the source file path");
     let src_content = read_to_string(src_path).expect("Enable to read file into string");
@@ -25,5 +27,6 @@ fn main() {
         &mut generated_asm,
     )
     .unwrap();
-    print!("{generated_asm}");
+    std::fs::write(out_path.clone(), generated_asm).expect("Unable to write to output path");
+    println!("Output written to {:?}", out_path);
 }

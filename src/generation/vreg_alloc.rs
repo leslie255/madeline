@@ -243,17 +243,21 @@ where
                     allocator.mark_alive(*id, step);
                     update_reg_lifetime_if_needed!(rhs.as_ref(), step);
                 }
-                Instruction::Store { id, rhs } => {
+                Instruction::Store {
+                    lhs_dtype: _,
+                    id,
+                    rhs,
+                } => {
                     allocator.mark_alive_until(*id, step);
                     update_reg_lifetime_if_needed!(rhs.as_ref(), step);
                 }
                 Instruction::Ret(Some(ret_val)) => {
                     update_reg_lifetime_if_needed!(ret_val.as_ref(), step);
                 }
-                Instruction::Add(lhs, rhs)
-                | Instruction::Sub(lhs, rhs)
-                | Instruction::Mul(lhs, rhs)
-                | Instruction::Div(lhs, rhs) => {
+                Instruction::Add(_, lhs, rhs)
+                | Instruction::Sub(_, lhs, rhs)
+                | Instruction::Mul(_, lhs, rhs)
+                | Instruction::Div(_, lhs, rhs) => {
                     update_reg_lifetime_if_needed!(lhs.as_ref(), step);
                     update_reg_lifetime_if_needed!(rhs.as_ref(), step);
                 }

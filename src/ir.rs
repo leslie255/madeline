@@ -39,10 +39,15 @@ pub enum Instruction {
     Float(DataType, f64),
     String(Vec<u8>),
 
-    Add(Box<Self>, Box<Self>),
-    Sub(Box<Self>, Box<Self>),
-    Mul(Box<Self>, Box<Self>),
-    Div(Box<Self>, Box<Self>),
+    Add(DataType, Box<Self>, Box<Self>),
+    Sub(DataType, Box<Self>, Box<Self>),
+    Mul(DataType, Box<Self>, Box<Self>),
+    Div(DataType, Box<Self>, Box<Self>),
+
+    Not(DataType, Box<Self>, Box<Self>),
+    And(DataType, Box<Self>, Box<Self>),
+    Or(DataType, Box<Self>, Box<Self>),
+    Xor(DataType, Box<Self>, Box<Self>),
 
     Load {
         id: u64,
@@ -56,6 +61,7 @@ pub enum Instruction {
     },
 
     Store {
+        lhs_dtype: DataType,
         id: u64,
         rhs: Box<Self>,
     },

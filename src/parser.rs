@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::{iter::Peekable, rc::Rc, str::Chars, vec::IntoIter};
 
 use crate::ir::{DataType, Instruction, TopLevel};
@@ -16,7 +14,6 @@ pub enum Token {
     Sub,
     Mul,
     Div,
-    Mod,
 
     Not,
     And,
@@ -72,9 +69,9 @@ impl Token {
         matches!(self, Self::BraceClose)
     }
 
-    pub fn as_type_name(&self) -> Option<&DataType> {
+    pub fn as_type_name(&self) -> Option<DataType> {
         if let Self::TypeName(v) = self {
-            Some(v)
+            Some(*v)
         } else {
             None
         }
@@ -155,6 +152,17 @@ pub fn parse_string_into_tokens(source: String) -> Vec<Token> {
             ']' => tokens.push(Token::RectParenClose),
             '{' => tokens.push(Token::BraceOpen),
             '}' => tokens.push(Token::BraceClose),
+
+            '+' => tokens.push(Token::Add),
+            '-' => tokens.push(Token::Sub),
+            '*' => tokens.push(Token::Mul),
+            '/' => tokens.push(Token::Div),
+
+            '~' => tokens.push(Token::Not),
+            '&' => tokens.push(Token::And),
+            '|' => tokens.push(Token::Or),
+            '^' => tokens.push(Token::Xor),
+
             '$' => {
                 tokens.push(parse_number(collect_ch!(|c| c.is_ascii_alphanumeric()
                     || *c == '-'
@@ -174,7 +182,7 @@ pub fn parse_string_into_tokens(source: String) -> Vec<Token> {
                 || *c == '_'
                 || *c == '.')))),
             '\"' => tokens.push(parse_string(&mut chars_iter)),
-            '/' => while chars_iter.next_if(|c| *c != '\n').is_some() {},
+            '\\' => while chars_iter.next_if(|c| *c != '\n').is_some() {},
             _ => panic!("cannot recognize {first_ch:?}"),
         }
     }
@@ -462,36 +470,84 @@ fn parse_fn_body(token_stream: &mut Peekable<IntoIter<Token>>) -> Option<Instruc
             })
         }
         Token::Label(name) => Some(Instruction::Label(name)),
-        Token::RectParenOpen => {
-            let id = *token_stream.next()?.as_reg_id()?;
-            token_stream.next()?; // RectParenClose
-            token_stream.next()?; // Equal
-            let rhs = parse_operand(token_stream)?;
-            Some(Instruction::Store {
-                id,
-                rhs: Box::new(rhs),
-            })
-        }
+        Token::TypeName(dtype) => match token_stream.next()? {
+            Token::RectParenOpen => {
+                let id = *token_stream.next()?.as_reg_id()?;
+                token_stream.next()?; // RectParenClose
+                token_stream.next()?; // Equal
+                let rhs = parse_operand(token_stream)?;
+                Some(Instruction::Store {
+                    lhs_dtype: dtype,
+                    id,
+                    rhs: Box::new(rhs),
+                })
+            }
+            _ => panic!("Unexpected token after type name"),
+        },
         t => panic!("Invalid token for function body: {t:?}"),
     }
 }
 
 fn parse_operand(token_stream: &mut Peekable<IntoIter<Token>>) -> Option<Instruction> {
-    let current = token_stream.next()?;
-    match current {
-        Token::TypeName(t) => match token_stream.next()? {
-            Token::NumU(u) => Some(Instruction::UInt(t, u)),
-            Token::NumI(i) => Some(Instruction::Int(t, i)),
-            Token::NumF(f) => Some(Instruction::Float(t, f)),
-            Token::RegID(id) => Some(Instruction::Reg(t, id)),
-            Token::ArgID(id) => Some(Instruction::Arg(t, id)),
+    match token_stream.next()? {
+        Token::Add => {
+            let dtype = token_stream.next()?.as_type_name()?;
+            let lhs = parse_operand(token_stream)?;
+            let rhs = parse_operand(token_stream)?;
+            Some(Instruction::Add(dtype, Box::new(lhs), Box::new(rhs)))
+        }
+        Token::Sub => {
+            let dtype = token_stream.next()?.as_type_name()?;
+            let lhs = parse_operand(token_stream)?;
+            let rhs = parse_operand(token_stream)?;
+            Some(Instruction::Sub(dtype, Box::new(lhs), Box::new(rhs)))
+        }
+        Token::Mul => {
+            let dtype = token_stream.next()?.as_type_name()?;
+            let lhs = parse_operand(token_stream)?;
+            let rhs = parse_operand(token_stream)?;
+            Some(Instruction::Mul(dtype, Box::new(lhs), Box::new(rhs)))
+        }
+        Token::Div => {
+            let dtype = token_stream.next()?.as_type_name()?;
+            let lhs = parse_operand(token_stream)?;
+            let rhs = parse_operand(token_stream)?;
+            Some(Instruction::Div(dtype, Box::new(lhs), Box::new(rhs)))
+        }
+        Token::Not => {
+            let dtype = token_stream.next()?.as_type_name()?;
+            let lhs = parse_operand(token_stream)?;
+            let rhs = parse_operand(token_stream)?;
+            Some(Instruction::Not(dtype, Box::new(lhs), Box::new(rhs)))
+        }
+        Token::And => {
+            let dtype = token_stream.next()?.as_type_name()?;
+            let lhs = parse_operand(token_stream)?;
+            let rhs = parse_operand(token_stream)?;
+            Some(Instruction::And(dtype, Box::new(lhs), Box::new(rhs)))
+        }
+        Token::Or => {
+            let dtype = token_stream.next()?.as_type_name()?;
+            let lhs = parse_operand(token_stream)?;
+            let rhs = parse_operand(token_stream)?;
+            Some(Instruction::Or(dtype, Box::new(lhs), Box::new(rhs)))
+        }
+        Token::Xor => {
+            let dtype = token_stream.next()?.as_type_name()?;
+            let lhs = parse_operand(token_stream)?;
+            let rhs = parse_operand(token_stream)?;
+            Some(Instruction::Xor(dtype, Box::new(lhs), Box::new(rhs)))
+        }
+        Token::TypeName(dtype) => match token_stream.next()? {
+            Token::NumU(u) => Some(Instruction::UInt(dtype, u)),
+            Token::NumI(i) => Some(Instruction::Int(dtype, i)),
+            Token::NumF(f) => Some(Instruction::Float(dtype, f)),
+            Token::RegID(id) => Some(Instruction::Reg(dtype, id)),
+            Token::ArgID(id) => Some(Instruction::Arg(dtype, id)),
             Token::RectParenOpen => {
                 let reg_id = *token_stream.next()?.as_reg_id()?;
                 token_stream.next()?; // RectParenClose
-                Some(Instruction::Load {
-                    id: reg_id,
-                    dtype: t,
-                })
+                Some(Instruction::Load { id: reg_id, dtype })
             }
             Token::Call => {
                 let fn_name = Rc::clone(token_stream.next()?.as_fn_name()?);
@@ -516,9 +572,9 @@ fn parse_operand(token_stream: &mut Peekable<IntoIter<Token>>) -> Option<Instruc
                     args,
                 })
             }
-            _ => panic!("Invalid token after {t:?}"),
+            dtype => panic!("Invalid token after {:?}", dtype),
         },
-        Token::Alloc => Some(Instruction::Alloc(*token_stream.next()?.as_type_name()?)),
+        Token::Alloc => Some(Instruction::Alloc(token_stream.next()?.as_type_name()?)),
         t => panic!("Invalid token for operand: {t:?}"),
     }
 }
