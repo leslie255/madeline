@@ -18,6 +18,7 @@ pub enum VRegContentKind {
     /// `u8` is the dtype size
     StackSpace(u8),
     Normal,
+    Const([u8; 8]),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,6 +50,7 @@ pub enum VRegAlloc {
     /// VReg is a point to a stack space
     /// `usize` is the Stackspace ID
     StackPtr(usize),
+    Const([u8; 8]),
 }
 
 impl VRegAlloc {
@@ -59,9 +61,16 @@ impl VRegAlloc {
             None
         }
     }
-
+    /// Returns the Stackspace ID of the register
     pub fn as_stack_ptr(&self) -> Option<usize> {
         if let Self::StackPtr(v) = self {
+            Some(*v)
+        } else {
+            None
+        }
+    }
+    pub fn as_const(&self) -> Option<[u8; 8]> {
+        if let Self::Const(v) = self {
             Some(*v)
         } else {
             None
@@ -195,18 +204,6 @@ where
                 }
             })
     }
-    /// If a real register is occupied at one step
-    /// Register must be of their default size (e.g. `eax` would be illegal, must be `rax`)
-    pub fn is_occupied(&self, step: usize, reg: R) -> bool {
-        // There will never be more than 10 registers so linear search is ok
-        let reg_id = self
-            .reg_ids
-            .iter()
-            .enumerate()
-            .find_map(|(i, &r)| if r == reg { Some(i) } else { None })
-            .unwrap();
-        self.step_map[step].reg_occupation[reg_id]
-    }
     /// Generate a register allocator for a block
     pub fn generate_from(body: &Vec<Instruction>, stack_allocator: &mut StackAllocator) -> Self {
         let vreg_count = body.iter().filter(|&i| i.is_def_reg()).count();
@@ -234,8 +231,14 @@ where
                                 VRegContentKind::StackSpace(dtype.size(8))
                             }
                             Instruction::Reg(_, id) => {
-                                allocator.vreg_infos[allocator.vreg_ids[id]].content_kind
+                                match allocator.vreg_infos[allocator.vreg_ids[id]].content_kind {
+                                    VRegContentKind::StackSpace(_) => VRegContentKind::Normal,
+                                    kind => kind
+                                }
                             }
+                            Instruction::UInt(_, u) => VRegContentKind::Const(u.to_be_bytes()),
+                            Instruction::Int(_, i) => VRegContentKind::Const(i.to_be_bytes()),
+                            Instruction::Float(_, f) => VRegContentKind::Const(f.to_be_bytes()),
                             _ => VRegContentKind::Normal,
                         },
                     );
@@ -281,17 +284,25 @@ where
             for (internal_id, life_stage) in life_stages.iter().enumerate() {
                 match life_stage {
                     VRegLifeStage::Born if self.vreg_infos[internal_id].lifetime.len() != 0 => {
-                        if let VRegContentKind::StackSpace(dtype_size) =
-                            self.vreg_infos[internal_id].content_kind
-                        {
-                            let stackspace_id = stack_allocator.add_var(dtype_size);
-                            self.vreg_infos[internal_id].allocation =
-                                Some(VRegAlloc::StackPtr(stackspace_id));
-                        } else if let Some(reg_id) = Self::try_alloc_real_reg(&mut reg_occupation) {
-                            self.vreg_infos[internal_id].allocation =
-                                Some(VRegAlloc::RealReg(reg_id));
-                        } else {
-                            todo!("Allocate stack space for virtual register");
+                        match self.vreg_infos[internal_id].content_kind {
+                            VRegContentKind::StackSpace(dtype_size) => {
+                                let stackspace_id = stack_allocator.add_var(dtype_size);
+                                self.vreg_infos[internal_id].allocation =
+                                    Some(VRegAlloc::StackPtr(stackspace_id));
+                            }
+                            VRegContentKind::Normal => {
+                                if let Some(reg_id) = Self::try_alloc_real_reg(&mut reg_occupation)
+                                {
+                                    self.vreg_infos[internal_id].allocation =
+                                        Some(VRegAlloc::RealReg(reg_id));
+                                } else {
+                                    todo!("Allocate stack space for virtual register");
+                                }
+                            }
+                            VRegContentKind::Const(val) => {
+                                self.vreg_infos[internal_id].allocation =
+                                    Some(VRegAlloc::Const(val))
+                            }
                         }
                     }
                     VRegLifeStage::Live => (),
@@ -318,6 +329,7 @@ where
             .as_real_reg()?;
         Some(self.reg_ids[internal_reg_id])
     }
+    /// Returns the Stackspace ID of the VReg
     pub fn get_alloced_stackptr(&self, id: u64) -> Option<usize> {
         let internal_vreg_id = self.vreg_ids[&id];
         let stack_id = self.vreg_infos[internal_vreg_id]
@@ -325,15 +337,20 @@ where
             .as_stack_ptr()?;
         Some(stack_id)
     }
+    pub fn get_alloced_const(&self, id: u64) -> Option<[u8; 8]> {
+        let internal_vreg_id = self.vreg_ids[&id];
+        self.vreg_infos[internal_vreg_id].allocation?.as_const()
+    }
 
     pub fn for_each_living_reg<F>(&self, step: usize, mut f: F)
     where
         F: FnMut(R),
     {
-        self.step_map[step].reg_occupation
+        self.step_map[step]
+            .reg_occupation
             .iter()
             .zip(self.reg_ids.iter())
-            .filter(|&(&in_use, _)|in_use)
+            .filter(|&(&in_use, _)| in_use)
             .for_each(|(_, &r)| f(r));
     }
 
@@ -341,10 +358,11 @@ where
     where
         F: FnMut(R),
     {
-        self.step_map[step].reg_occupation
+        self.step_map[step]
+            .reg_occupation
             .iter()
             .zip(self.reg_ids.iter())
-            .filter(|&(&in_use, _)|in_use)
+            .filter(|&(&in_use, _)| in_use)
             .rev()
             .for_each(|(_, &r)| f(r));
     }
@@ -397,6 +415,7 @@ where
                     match info.content_kind {
                         VRegContentKind::StackSpace(_) => "stack",
                         VRegContentKind::Normal => "normal",
+                        VRegContentKind::Const(_) => "const",
                     },
                     info.lifetime,
                 );
@@ -404,6 +423,7 @@ where
                     match reg_alloc {
                         VRegAlloc::RealReg(reg_id) => println!("\t{}", self.reg_ids[reg_id]),
                         VRegAlloc::StackPtr(loc) => println!("\tstack {}", loc),
+                        VRegAlloc::Const(val) => println!("\tconst {}", u64::from_be_bytes(val)),
                     }
                 } else {
                     println!("\tNo alloc")

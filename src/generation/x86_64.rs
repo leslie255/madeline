@@ -156,6 +156,11 @@ impl Display for EvalTreeNode {
         Ok(())
     }
 }
+impl From<X64Register> for EvalTreeNode {
+    fn from(reg: X64Register) -> Self {
+        Self::Reg(reg)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum X64Register {
@@ -461,37 +466,43 @@ fn gen_inside_fn(
     for (step, instruction) in body.into_iter().enumerate() {
         match instruction {
             IRInstruction::DefReg { id, rhs } => {
-                let (rhs_dtype, rhs_operand) = gen_operand(*rhs, &stack_alloc, &vreg_allocations);
-                let lhs_operand = if let Some(real_reg) = vreg_allocations.get_alloced_reg(id) {
-                    real_reg.of_size(rhs_dtype.into()).into()
+                if let IRInstruction::Alloc(_) = *rhs {
+                    continue;
+                }
+                let (rhs_dtype, rhs_oper) = gen_operand(*rhs, &stack_alloc, &vreg_allocations);
+                let size: X86WordSize = rhs_dtype.into();
+                if let Some(real_reg) = vreg_allocations.get_alloced_reg(id) {
+                    let lhs_oper = real_reg.of_size(size).into();
+                    gen_move_instruction(size, lhs_oper, size, rhs_oper, target);
                 } else if let Some(stackspace_id) = vreg_allocations.get_alloced_stackptr(id) {
-                    Operand::rbp_sub(rhs_dtype.into(), stack_alloc.var_location(stackspace_id))
+                    let lhs_oper =
+                        Operand::rbp_sub(rhs_dtype.into(), stack_alloc.var_location(stackspace_id));
+                    gen_move_instruction(size, lhs_oper, size, rhs_oper, target);
+                } else if let Some(_) = vreg_allocations.get_alloced_const(id) {
+                    // No need to generate anything here since for every occurance of this register
+                    // we can just replace it with the const value
                 } else {
                     todo!("Allocate VReg on stack")
-                };
-                target.push(Instruction::Mov(lhs_operand, rhs_operand))
+                }
             }
             IRInstruction::Store { id: vreg_id, rhs } => {
                 let stackspace_id = vreg_allocations
                     .get_alloced_stackptr(vreg_id)
                     .expect("Storing into a register who is not a stack pointer");
                 let stack_location = stack_alloc.var_location(stackspace_id);
-                let (dtype, rhs_operand) = gen_operand(*rhs, &stack_alloc, &vreg_allocations);
-                target.push(Instruction::Mov(
-                    Operand::rbp_sub(dtype.into(), stack_location),
-                    rhs_operand,
-                ));
+                let (rhs_dtype, rhs_oper) = gen_operand(*rhs, &stack_alloc, &vreg_allocations);
+                let size: X86WordSize = rhs_dtype.into();
+                let lhs_oper = Operand::rbp_sub(rhs_dtype.into(), stack_location);
+                gen_move_instruction(size, lhs_oper, size, rhs_oper, target);
             }
             IRInstruction::Ret(ret_val) => {
                 if let Some(ret_val) = ret_val {
                     // Has return value
-                    let (operand_type, operand) =
+                    let (oper_dtype, operand) =
                         gen_operand(*ret_val, &stack_alloc, &vreg_allocations);
-                    let operand_type = operand_type;
-                    target.push(Instruction::Mov(
-                        X64Register::Rax.of_size(operand_type.into()).into(),
-                        operand,
-                    ));
+                    let size: X86WordSize = oper_dtype.into();
+                    let rax_sized = X64Register::Rax.of_size(size);
+                    gen_move_instruction(size, rax_sized.into(), size, operand, target);
                 }
                 if !stack_alloc.locations.is_empty() {
                     target.push(Instruction::DeallocStack(stack_alloc.stack_depth));
@@ -510,10 +521,11 @@ fn gen_inside_fn(
                 vreg_allocations
                     .for_each_living_reg(step, |r| target.push(Instruction::Push(r.into())));
                 for (i, arg_instruction) in args.into_iter().rev().enumerate() {
-                    let (arg_dtype, arg_operand) =
+                    let (arg_dtype, arg_oper) =
                         gen_operand(arg_instruction, &stack_alloc, &vreg_allocations);
-                    let arg_reg = arg_regs[i].of_size(arg_dtype.into());
-                    target.push(Instruction::Mov(arg_reg.into(), arg_operand))
+                    let size: X86WordSize = arg_dtype.into();
+                    let arg_reg = arg_regs[i].of_size(size);
+                    gen_move_instruction(size, arg_reg.into(), size, arg_oper, target);
                 }
                 target.push(Instruction::Call(fn_name));
                 vreg_allocations
@@ -534,13 +546,24 @@ fn gen_operand(
 ) -> (DataType, Operand) {
     match instruction {
         IRInstruction::Arg(_, _) => todo!(),
-        IRInstruction::Reg(dtype, reg) => (
+        IRInstruction::Reg(dtype, reg_id) => (
             dtype,
-            vreg_alloc
-                .get_alloced_reg(reg)
-                .expect("No real register allocated for VReg")
-                .of_size(dtype.into())
-                .into(),
+            if let Some(reg) = vreg_alloc.get_alloced_reg(reg_id) {
+                reg.of_size(dtype.into()).into()
+            } else if let Some(val) = vreg_alloc.get_alloced_const(reg_id) {
+                Operand::Im(val)
+            } else if let Some(stackspace_id) = vreg_alloc.get_alloced_stackptr(reg_id) {
+                let stack_loc = stack_alloc.var_location(stackspace_id);
+                Operand::Load(EvalTreeNode::Sub(
+                    Box::new(X64Register::Rbp.into()),
+                    Box::new(EvalTreeNode::Num(stack_loc as u64)),
+                ))
+            } else {
+                panic!(
+                    "VReg allocation type not supported by x86_64 codegen (vreg: {})",
+                    reg_id
+                )
+            },
         ),
         IRInstruction::UInt(dtype, val) => (dtype, Operand::Im(val.to_be_bytes())),
         IRInstruction::Int(dtype, val) => (dtype, Operand::Im(val.to_be_bytes())),
@@ -557,5 +580,35 @@ fn gen_operand(
             ),
         ),
         illegal => panic!("{:?} cannot be an operand", illegal),
+    }
+}
+
+/// Generate a `mov` instruction
+fn gen_move_instruction(
+    lhs_size: X86WordSize,
+    lhs_oper: Operand,
+    rhs_size: X86WordSize,
+    rhs_oper: Operand,
+    target: &mut Vec<Instruction>,
+) {
+    match (&lhs_oper, &rhs_oper) {
+        (Operand::WordPtr(_, _), Operand::Load(_)) => {
+            let rax = X64Register::Rax.of_size(lhs_size);
+            target.push(Instruction::Lea(rax.into(), lhs_oper));
+            target.push(Instruction::Mov(rhs_oper, rax.into()));
+        }
+        (_, Operand::Load(_)) => target.push(Instruction::Lea(lhs_oper, rhs_oper)),
+        (Operand::WordPtr(_, _), Operand::WordPtr(_, _)) => {
+            let rax = X64Register::Rax.of_size(lhs_size);
+            target.push(Instruction::Mov(rax.into(), lhs_oper));
+            target.push(Instruction::Mov(rhs_oper, rax.into()));
+        }
+        _ => {
+            if rhs_size < lhs_size {
+                target.push(Instruction::Movzx(lhs_oper, rhs_oper));
+            } else {
+                target.push(Instruction::Mov(lhs_oper, rhs_oper));
+            }
+        }
     }
 }
