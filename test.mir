@@ -1,6 +1,10 @@
+fn @test(i32) {
+    ret
+}
+
 fn @main(i32 ptr) {
-    %1 = alloc i32
-    [%1] = i32 $42
-    ret i32 [%1]
+    call @func(i32 $12)
+    %1 = i32 $42
+    ret i32 %1
 }
 
