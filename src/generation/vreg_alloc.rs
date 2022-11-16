@@ -12,18 +12,20 @@ where
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// The type of content inside the VReg, could be either a pointer to a stack space, or a value
-pub enum VRegContentKind {
+enum VRegContentKind {
     /// `u8` is the dtype size
-    StackSpace(u8),
+    StackPtr(u8),
     Normal,
     Const([u8; 8]),
+    /// same content as a previously occured register, `usize` is internal id
+    Aliased(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VRegInfo {
     pub external_id: u64,
     /// The type of content inside the VReg, could be either a pointer to a stack space, or a value
-    pub content_kind: VRegContentKind,
+    content_kind: VRegContentKind,
     /// The first and last appearance of the VReg
     pub lifetime: Range<usize>,
     /// Where the real location of the register is, can be either inside a real register in the CPU
@@ -226,13 +228,11 @@ where
                         match rhs.as_ref() {
                             Instruction::Alloc(dtype) => {
                                 // TODO: dynamic word size
-                                VRegContentKind::StackSpace(dtype.size(8))
+                                VRegContentKind::StackPtr(dtype.size(8))
                             }
                             Instruction::Reg(_, id) => {
-                                match allocator.vreg_infos[allocator.vreg_ids[id]].content_kind {
-                                    VRegContentKind::StackSpace(_) => VRegContentKind::Normal,
-                                    kind => kind,
-                                }
+                                let aliased_id = allocator.vreg_ids[id];
+                                VRegContentKind::Aliased(aliased_id)
                             }
                             Instruction::UInt(_, u) => VRegContentKind::Const(u.to_be_bytes()),
                             Instruction::Int(_, i) => VRegContentKind::Const(i.to_be_bytes()),
@@ -287,7 +287,7 @@ where
                 match life_stage {
                     VRegLifeStage::Born if self.vreg_infos[internal_id].lifetime.len() != 0 => {
                         match self.vreg_infos[internal_id].content_kind {
-                            VRegContentKind::StackSpace(dtype_size) => {
+                            VRegContentKind::StackPtr(dtype_size) => {
                                 let stackspace_id = stack_allocator.add_var(dtype_size);
                                 self.vreg_infos[internal_id].allocation =
                                     Some(VRegAlloc::StackPtr(stackspace_id));
@@ -303,7 +303,11 @@ where
                             }
                             VRegContentKind::Const(val) => {
                                 self.vreg_infos[internal_id].allocation =
-                                    Some(VRegAlloc::Const(val))
+                                    Some(VRegAlloc::Const(val));
+                            }
+                            VRegContentKind::Aliased(aliased_id) => {
+                                self.vreg_infos[internal_id].allocation =
+                                    self.vreg_infos[aliased_id].allocation;
                             }
                         }
                     }
@@ -415,9 +419,10 @@ where
                     "{}:\t{}\t{:?}",
                     info.external_id,
                     match info.content_kind {
-                        VRegContentKind::StackSpace(_) => "stack",
+                        VRegContentKind::StackPtr(_) => "stack",
                         VRegContentKind::Normal => "normal",
                         VRegContentKind::Const(_) => "const",
+                        VRegContentKind::Aliased(_) => "aliased",
                     },
                     info.lifetime,
                 );

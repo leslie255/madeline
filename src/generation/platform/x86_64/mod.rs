@@ -326,8 +326,10 @@ fn gen_inside_fn(
     for (step, instruction) in body.into_iter().enumerate() {
         match instruction {
             IRInstruction::DefReg { id, rhs } => {
-                if let IRInstruction::Alloc(_) = *rhs {
-                    continue;
+                match *rhs {
+                    IRInstruction::Alloc(_) => continue,
+                    IRInstruction::Reg(_, _) => continue,
+                    _ => (),
                 }
                 let (rhs_dtype, rhs_oper) = gen_operand(*rhs, &stack_alloc, &vreg_allocations);
                 let size: X86WordSize = rhs_dtype.into();

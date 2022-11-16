@@ -490,55 +490,47 @@ fn parse_fn_body(token_stream: &mut Peekable<IntoIter<Token>>) -> Option<Instruc
 
 fn parse_operand(token_stream: &mut Peekable<IntoIter<Token>>) -> Option<Instruction> {
     match token_stream.next()? {
-        Token::Add => {
-            let dtype = token_stream.next()?.as_type_name()?;
-            let lhs = parse_operand(token_stream)?;
-            let rhs = parse_operand(token_stream)?;
-            Some(Instruction::Add(dtype, Box::new(lhs), Box::new(rhs)))
-        }
-        Token::Sub => {
-            let dtype = token_stream.next()?.as_type_name()?;
-            let lhs = parse_operand(token_stream)?;
-            let rhs = parse_operand(token_stream)?;
-            Some(Instruction::Sub(dtype, Box::new(lhs), Box::new(rhs)))
-        }
-        Token::Mul => {
-            let dtype = token_stream.next()?.as_type_name()?;
-            let lhs = parse_operand(token_stream)?;
-            let rhs = parse_operand(token_stream)?;
-            Some(Instruction::Mul(dtype, Box::new(lhs), Box::new(rhs)))
-        }
-        Token::Div => {
-            let dtype = token_stream.next()?.as_type_name()?;
-            let lhs = parse_operand(token_stream)?;
-            let rhs = parse_operand(token_stream)?;
-            Some(Instruction::Div(dtype, Box::new(lhs), Box::new(rhs)))
-        }
-        Token::Not => {
-            let dtype = token_stream.next()?.as_type_name()?;
-            let lhs = parse_operand(token_stream)?;
-            let rhs = parse_operand(token_stream)?;
-            Some(Instruction::Not(dtype, Box::new(lhs), Box::new(rhs)))
-        }
-        Token::And => {
-            let dtype = token_stream.next()?.as_type_name()?;
-            let lhs = parse_operand(token_stream)?;
-            let rhs = parse_operand(token_stream)?;
-            Some(Instruction::And(dtype, Box::new(lhs), Box::new(rhs)))
-        }
-        Token::Or => {
-            let dtype = token_stream.next()?.as_type_name()?;
-            let lhs = parse_operand(token_stream)?;
-            let rhs = parse_operand(token_stream)?;
-            Some(Instruction::Or(dtype, Box::new(lhs), Box::new(rhs)))
-        }
-        Token::Xor => {
-            let dtype = token_stream.next()?.as_type_name()?;
-            let lhs = parse_operand(token_stream)?;
-            let rhs = parse_operand(token_stream)?;
-            Some(Instruction::Xor(dtype, Box::new(lhs), Box::new(rhs)))
-        }
         Token::TypeName(dtype) => match token_stream.next()? {
+            Token::Add => {
+                let lhs = parse_operand(token_stream)?;
+                let rhs = parse_operand(token_stream)?;
+                Some(Instruction::Add(dtype, Box::new(lhs), Box::new(rhs)))
+            }
+            Token::Sub => {
+                let lhs = parse_operand(token_stream)?;
+                let rhs = parse_operand(token_stream)?;
+                Some(Instruction::Sub(dtype, Box::new(lhs), Box::new(rhs)))
+            }
+            Token::Mul => {
+                let lhs = parse_operand(token_stream)?;
+                let rhs = parse_operand(token_stream)?;
+                Some(Instruction::Mul(dtype, Box::new(lhs), Box::new(rhs)))
+            }
+            Token::Div => {
+                let lhs = parse_operand(token_stream)?;
+                let rhs = parse_operand(token_stream)?;
+                Some(Instruction::Div(dtype, Box::new(lhs), Box::new(rhs)))
+            }
+            Token::Not => {
+                let lhs = parse_operand(token_stream)?;
+                let rhs = parse_operand(token_stream)?;
+                Some(Instruction::Not(dtype, Box::new(lhs), Box::new(rhs)))
+            }
+            Token::And => {
+                let lhs = parse_operand(token_stream)?;
+                let rhs = parse_operand(token_stream)?;
+                Some(Instruction::And(dtype, Box::new(lhs), Box::new(rhs)))
+            }
+            Token::Or => {
+                let lhs = parse_operand(token_stream)?;
+                let rhs = parse_operand(token_stream)?;
+                Some(Instruction::Or(dtype, Box::new(lhs), Box::new(rhs)))
+            }
+            Token::Xor => {
+                let lhs = parse_operand(token_stream)?;
+                let rhs = parse_operand(token_stream)?;
+                Some(Instruction::Xor(dtype, Box::new(lhs), Box::new(rhs)))
+            }
             Token::NumU(u) => Some(Instruction::UInt(dtype, u)),
             Token::NumI(i) => Some(Instruction::Int(dtype, i)),
             Token::NumF(f) => Some(Instruction::Float(dtype, f)),
